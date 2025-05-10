@@ -103,6 +103,14 @@ class CompilerAgent(Agent):
             model=model_arg,  # Pass the model name or Model instance
             tools=agent_tools,
             output_type=str,  # Expects a string (file path) as the final output
+            temperature=0.3,  # Recommended 0.2 to 0.4
+            top_p=0.9,
+            top_k=0,
+            frequency_penalty=0.0,
+            presence_penalty=0.0,
+            repetition_penalty=1.0,
+            min_p=0.0,
+            top_a=0.0,
             **kwargs,
         )
 

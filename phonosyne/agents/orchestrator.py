@@ -144,6 +144,14 @@ class OrchestratorAgent(Agent):
             model=model,
             tools=agent_tools,
             output_type=str,
+            temperature=0.4,  # Recommended 0.3 to 0.5
+            top_p=0.9,
+            top_k=0,
+            frequency_penalty=0.1,  # Recommended 0.0 to 0.2
+            presence_penalty=0.15,  # Recommended 0.0 to 0.3
+            repetition_penalty=1.0,
+            min_p=0.0,
+            top_a=0.0,
             **kwargs,
         )
 

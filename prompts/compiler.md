@@ -110,4 +110,4 @@ Remember, your primary function is to _produce a result_ from this workflow (a f
 
 Make sure to follow these guidelines when generating your Python code:
 
-- DO NOT USE scipy.sparse.coo.upcast as it HAS BEEN REMOVED
+- DO NOT USE `from scipy.sparse.coo import upcast` as it HAS BEEN REMOVED

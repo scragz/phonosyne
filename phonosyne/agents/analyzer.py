@@ -100,6 +100,14 @@ class AnalyzerAgent(Agent):
             model=model_arg,  # Pass the model name or Model instance
             # output_type=AnalyzerOutput,  # Temporarily removed to rely on prompt for JSON structure
             tools=[],  # AnalyzerAgent itself does not use tools
+            temperature=0.6,  # Recommended 0.5 to 0.7
+            top_p=0.95,
+            top_k=0,
+            frequency_penalty=0.2,  # Recommended 0.1 to 0.3
+            presence_penalty=0.2,  # Recommended 0.1 to 0.3
+            repetition_penalty=1.0,
+            min_p=0.0,
+            top_a=0.0,
             **kwargs,
         )
 
