@@ -1,126 +1,121 @@
 # Phonosyne System Overview
 
-Phonosyne is an AI-powered system designed to generate collections of audio samples from natural-language sound design briefs. It employs a multi-agent pipeline, where each agent has a specialized role in transforming the initial prompt into validated `.wav` files.
+Phonosyne is an AI-powered system designed to generate collections of audio samples from natural-language sound design briefs. It employs a multi-agent pipeline, where each agent, built using the `openai-agents` SDK, has a specialized role in transforming the initial prompt into validated `.wav` files.
 
 ## Core Architecture
 
-The system is built around a central `Manager` (in `phonosyne.orchestrator`) that coordinates a sequence of agents and processes. The primary components are:
+The system is built around a central `OrchestratorAgent` (in `phonosyne.agents.orchestrator`) that coordinates a sequence of other specialized agents and utility functions, all operating as tools within the `openai-agents` framework.
 
 1. **Input**: A user-provided text prompt describing the desired sound collection.
-2. **Agent Pipeline**:
-   - **DesignerAgent**: Expands the brief into a structured plan.
-   - **AnalyzerAgent**: Enriches individual sample descriptions from the plan into detailed synthesis recipes.
-   - **CompilerAgent**: Generates Python DSP code from the synthesis recipes, executes it, and iteratively refines it.
-3. **Code Execution**: LLM-generated Python code is run using `smolagents.LocalPythonExecutor` for safer local execution.
-4. **Validation**: Generated audio files are validated against technical specifications.
+2. **Agent Pipeline (as Tools to OrchestratorAgent)**:
+   - **`DesignerAgentTool`**: Wraps `DesignerAgent`. Expands the brief into a structured plan (JSON string).
+   - **`AnalyzerAgentTool`**: Wraps `AnalyzerAgent`. Enriches individual sample descriptions from the plan into detailed synthesis recipes (JSON string).
+   - **`CompilerAgentTool`**: Wraps `CompilerAgent`. Generates Python DSP code from synthesis recipes, executes it, and iteratively refines it, returning a path to a validated temporary WAV file.
+   - **`FileMoverTool`**: A `FunctionTool` for moving files.
+   - **`ManifestGeneratorTool`**: A `FunctionTool` for creating the `manifest.json`.
+3. **Code Execution**: LLM-generated Python code is run using `smolagents.LocalPythonExecutor` (via `phonosyne.utils.exec_env.run_code`) for safer local execution.
+4. **Validation**: Generated audio files are validated against technical specifications using `phonosyne.dsp.validators.validate_wav`.
 5. **Output**: A directory containing the generated `.wav` files and a `manifest.json` summarizing the collection.
 
 ## Detailed Workflow and Data Flow
 
-The process begins when the user invokes Phonosyne via its CLI or SDK.
+The process begins when the user invokes Phonosyne, typically via `phonosyne.sdk.run_prompt()`.
 
-### 1. Initialization
+### 1. Initialization (`phonosyne.sdk.run_prompt`)
 
-- The `Manager` class is instantiated. It initializes instances of `DesignerAgent`, `AnalyzerAgent`, and `CompilerAgent`.
+- An `OrchestratorAgent` instance is created.
+- The `OrchestratorAgent` initializes instances of `DesignerAgent`, `AnalyzerAgent`, and `CompilerAgent`. Crucially, it provides each of these specialist agents with specific `Model` instances obtained from `OPENROUTER_MODEL_PROVIDER` (defined in `phonosyne.sdk.py`). This ensures they use the correct LLM configurations (e.g., specific models from OpenRouter).
+- These specialist agents, along with utility functions like `move_file` and `generate_manifest_file`, are configured as tools available to the `OrchestratorAgent`.
 - Configuration settings (LLM models, audio defaults, API keys) are loaded from `phonosyne.settings` (which can be influenced by an `.env` file).
+- The `agents.Runner.run()` method is called with the `OrchestratorAgent` as the starting agent, the user's brief as input, and a `RunConfig` specifying `OPENROUTER_MODEL_PROVIDER`.
 
-### 2. Design Phase (DesignerAgent)
+### 2. Design Phase (OrchestratorAgent using `DesignerAgentTool`)
 
-- **Input**: The user's sound design brief (a string).
+- **Input to Orchestrator**: The user's sound design brief (a string).
 - **Process**:
-  - The `Manager` calls `DesignerAgent.process()` with the brief.
-  - `DesignerAgent` uses its system prompt (`prompts/designer.md`) and the configured LLM (`MODEL_DESIGNER`) to generate a structured plan.
-  - The LLM is instructed to output a JSON object.
-- **Output**: A `DesignerOutput` Pydantic model (defined in `phonosyne.agents.schemas`). This model contains:
+  - The `OrchestratorAgent`, guided by its instructions (`prompts/orchestrator.md`), calls the `DesignerAgentTool`.
+  - `DesignerAgent` (within the tool) uses its system prompt (`prompts/designer.md`) and its configured `Model` instance to generate a plan.
+  - Due to the current setup (where `output_type` is not used in `DesignerAgent`'s constructor to ensure compatibility with certain LLMs like Gemini via OpenRouter), the `DesignerAgent`'s LLM is prompted to output a JSON string directly.
+- **Output from `DesignerAgentTool`**: A JSON string representing the sound design plan.
+- **Orchestrator Processing**: The `OrchestratorAgent`'s LLM receives this JSON string. Its instructions tell it to parse this string. If parsing is successful, it yields a structure equivalent to the `DesignerOutput` Pydantic model, containing:
   - `theme`: A short description of the user brief.
-  - `samples`: A list of `SampleStub` objects. Each `SampleStub` contains:
-    - `id`: Unique ID for the sample (e.g., "L1.1").
+  - `samples`: A list of `SampleStub` structures. Each `SampleStub` contains:
+    - `id`: Unique ID for the sample.
     - `seed_description`: A concise textual description of the sound.
     - `duration_s`: The target duration in seconds.
-- **Data Flow**: `str (user_brief) -> DesignerAgent -> DesignerOutput (Pydantic model)`
+- **Data Flow**: `str (user_brief) -> OrchestratorAgent (uses DesignerAgentTool) -> str (JSON plan from DesignerAgent's LLM) -> OrchestratorAgent's LLM (parses to internal DesignerOutput structure)`
 
-### 3. Sample Generation Loop (Orchestrated by Manager)
+### 3. Sample Generation Loop (Orchestrated by `OrchestratorAgent`'s LLM logic)
 
-The `Manager` iterates through each `SampleStub` in the `DesignerOutput` plan. For each sample, the following sub-pipeline is executed, potentially in parallel using a `ThreadPoolExecutor` (configurable by `num_workers`):
+The `OrchestratorAgent`'s LLM iterates through each sound stub derived from the parsed design plan. For each sample:
 
-#### 3.a. Analysis Phase (AnalyzerAgent)
+#### 3.a. Analysis Phase (OrchestratorAgent using `AnalyzerAgentTool`)
 
-- **Input**: An `AnalyzerInput` Pydantic model, derived from the current `SampleStub`. It includes the sample's `id`, `seed_description`, and `duration_s`.
+- **Input to `AnalyzerAgentTool`**: A JSON string representing the current `SampleStub` (or an equivalent `AnalyzerInput` structure), prepared by the `OrchestratorAgent`'s LLM.
 - **Process**:
-  - The `Manager` (specifically, its `_static_process_single_sample` worker method) calls `AnalyzerAgent.process()`.
-  - `AnalyzerAgent` uses its system prompt (`prompts/analyzer.md`) and `MODEL_ANALYZER` to transform the concise `seed_description` into a detailed, natural-language synthesis recipe.
-  - The LLM is instructed to output a single-line JSON object.
-- **Output**: An `AnalyzerOutput` Pydantic model. This model contains:
+  - `OrchestratorAgent` calls `AnalyzerAgentTool`.
+  - `AnalyzerAgent` (within the tool) uses its system prompt (`prompts/analyzer.md`) and its configured `Model` instance to transform the `seed_description` into a detailed synthesis recipe.
+  - Similar to `DesignerAgent`, `AnalyzerAgent` is prompted to output a JSON string directly.
+- **Output from `AnalyzerAgentTool`**: A JSON string representing the detailed synthesis recipe.
+- **Orchestrator Processing**: The `OrchestratorAgent`'s LLM receives this JSON string and parses it. If successful, it yields a structure equivalent to the `AnalyzerOutput` Pydantic model, containing:
   - `effect_name`: A slugified name for the sound.
   - `duration`: Target duration (float, seconds).
-  - `description`: A rich, natural-language text detailing how to synthesize the sound (layers, waveforms, envelopes, effects, etc.).
-- **Data Flow**: `AnalyzerInput (from SampleStub) -> AnalyzerAgent -> AnalyzerOutput (Pydantic model)`
+  - `description`: A rich, natural-language text detailing how to synthesize the sound.
+- **Data Flow**: `str (SampleStub/AnalyzerInput JSON) -> OrchestratorAgent (uses AnalyzerAgentTool) -> str (JSON recipe from AnalyzerAgent's LLM) -> OrchestratorAgent's LLM (parses to internal AnalyzerOutput structure)`
 
-#### 3.b. Compilation & Execution Phase (CompilerAgent & exec_env)
+#### 3.b. Compilation & Execution Phase (OrchestratorAgent using `CompilerAgentTool`)
 
-- **Input**: The `AnalyzerOutput` model (synthesis recipe) from the AnalyzerAgent.
-- **Process (Iterative Loop within CompilerAgent)**:
+- **Input to `CompilerAgentTool`**: A JSON string representing the `AnalyzerOutput` (synthesis recipe), prepared by the `OrchestratorAgent`'s LLM.
+- **Process (Iterative Loop within `CompilerAgent`)**:
   1. **Code Generation**:
-     - `CompilerAgent` uses its system prompt (`prompts/compiler.md`) and `MODEL_COMPILER`.
+     - `CompilerAgent` uses its system prompt (`prompts/compiler.md`) and its configured `Model` instance.
      - The prompt instructs the LLM to generate Python DSP code based on the `AnalyzerOutput.description`.
-     - Crucially, the generated code **must return a tuple `(audio_data_numpy_array, sample_rate_int)`**. It does _not_ write a file itself.
-     - The agent extracts the Python code from the LLM's Markdown response.
+     - The generated code **must return a tuple `(audio_data_numpy_array, sample_rate_int)`**.
+     - The agent extracts the Python code from the LLM's response.
   2. **Code Execution (`phonosyne.utils.exec_env.run_code`)**:
-     - The extracted Python code string is passed to `run_code` using the `"local_executor"` mode.
-     - `LocalPythonExecutor` (from `smolagents`) executes the code. It has a list of authorized imports (`numpy`, `scipy`, `math`, `random`, etc.) and an operation limit for safety.
-     - If execution is successful, `LocalPythonExecutor` returns the `(audio_data, sample_rate)` tuple.
-     - `run_code` then takes this tuple and saves the `audio_data` to a temporary `.wav` file using `soundfile.write()`. The path to this temporary WAV is returned by `run_code`.
+     - The Python code string is passed to `run_code` (using `"local_executor"` mode).
+     - `LocalPythonExecutor` executes the code, returning `(audio_data, sample_rate)`.
+     - `run_code` saves this to a temporary `.wav` file and returns its path.
   3. **Validation (via `phonosyne.dsp.validators.validate_wav`)**:
-     - The `CompilerAgent` calls `validate_wav` (passed as `validator_fn`) with the path to the temporary WAV file and the `AnalyzerOutput` (which contains the target specifications like duration and sample rate).
-     - `validate_wav` checks:
-       - Sample rate.
-       - Duration (within tolerance defined in `settings.DURATION_TOLERANCE_S`).
-       - Bit depth (32-bit float).
-       - Channels (mono).
-       - Peak audio level (must be `≤ settings.TARGET_PEAK_DBFS`).
-     - If validation passes, the loop for this sample ends, and the path to the (still temporary) WAV is considered final for this stage.
+     - `CompilerAgent` calls `validate_wav` with the temporary WAV path and `AnalyzerOutput` specs.
   4. **Repair (If Execution or Validation Fails)**:
-     - If code execution raises an error (e.g., `InterpreterError` from `LocalPythonExecutor`, or an error during `soundfile.write`), or if `validate_wav` raises `ValidationFailedError`, the `CompilerAgent` captures the error.
-     - The error message is formatted and provided back to the LLM in the next iteration of the code generation prompt, asking it to fix the issue.
-     - This loop continues for a maximum of `settings.MAX_COMPILER_ITERATIONS`.
-- **Output (from CompilerAgent.run)**: A `pathlib.Path` object pointing to the validated `.wav` file (still in a persistent temporary location managed by `exec_env.run_code`).
-- **Data Flow**: `AnalyzerOutput -> CompilerAgent -> (LLM for code) -> str (Python code) -> exec_env.run_code (with LocalPythonExecutor) -> (np.array, int) -> soundfile.write -> Path (temp WAV) -> validate_wav -> Path (final temp validated WAV)`
+     - Errors are fed back to the `CompilerAgent`'s LLM for code correction, iterating up to `settings.MAX_COMPILER_ITERATIONS`.
+- **Output from `CompilerAgentTool`**: A string representing the path to the validated temporary `.wav` file.
+- **Data Flow**: `str (AnalyzerOutput JSON) -> OrchestratorAgent (uses CompilerAgentTool) -> CompilerAgent -> (LLM for code) -> str (Python code) -> exec_env.run_code -> Path (temp WAV) -> validate_wav -> str (final temp validated WAV path)`
 
-#### 3.c. File Management (Manager)
+#### 3.c. File Management (OrchestratorAgent using `FileMoverTool`)
 
-- Once `CompilerAgent.run()` successfully returns a path to a validated temporary WAV file:
-  - The `Manager` moves this file from its persistent temporary location (e.g., in `./output/exec_env_output/`) to the final run-specific output directory (e.g., `./output/YYYYMMDD-HHMMSS_brief-slug/sample_id_effect-name.wav`).
+- Once `CompilerAgentTool` successfully returns a path:
+  - The `OrchestratorAgent`'s LLM determines the final path and uses `FileMoverTool` to move the temporary WAV to the run-specific output directory.
 - **Output**: The final `.wav` file in the run's output directory.
 
-### 4. Aggregation and Manifest Generation (Manager)
+### 4. Aggregation and Manifest Generation (OrchestratorAgent using `ManifestGeneratorTool`)
 
-- After all samples have been processed (or attempted):
-  - The `Manager` collects `SampleGenerationResult` objects for each sample, detailing its status (`success`, `failed_compilation`, `failed_validation`, etc.), final path (if successful), and any error messages.
-  - A `manifest.json` file is written to the root of the run-specific output directory. This JSON file includes:
-    - The original user brief and its slug.
-    - The path to the output directory.
-    - Counts of planned, succeeded, and failed samples.
-    - Total generation time.
-    - The original `DesignerOutput` plan structure.
-    - A list of detailed results for each sample.
+- After all samples are processed:
+  - The `OrchestratorAgent`'s LLM aggregates results (status, paths, errors for each sample).
+  - It structures this into a comprehensive JSON object for the manifest.
+  - It calls `ManifestGeneratorTool` with this JSON data string and the output directory path.
 - **Output**: A populated output directory and a `manifest.json`.
+
+### 5. Reporting (OrchestratorAgent)
+
+- The `OrchestratorAgent` (via its LLM) concludes by providing a summary of the operation. This is the final string output of the `OrchestratorAgent.run()` call.
 
 ## Entry Points
 
-- **SDK**: The `phonosyne.run_prompt()` function is the primary entry point for programmatic use. It instantiates and runs the `Manager`.
-- **CLI**: The `phonosyne` command (defined in `phonosyne.cli` using Typer) parses command-line arguments and calls `phonosyne.run_prompt()`. The `scripts/phonosyne_cli.py` wrapper allows direct execution.
+- **SDK**: The `phonosyne.sdk.run_prompt()` function is the primary entry point. It instantiates `OrchestratorAgent` and uses `agents.Runner` to execute it.
+- **CLI**: The `phonosyne` command (defined in `phonosyne.cli`) parses arguments and calls `phonosyne.sdk.run_prompt()`.
 
 ## Key Configuration Points (from `phonosyne.settings`)
 
-- `MODEL_DESIGNER`, `MODEL_ANALYZER`, `MODEL_COMPILER`: Specify the LLM models for each agent.
-- `OPENAI_API_KEY`: Essential for LLM calls.
-- `DEFAULT_SR`, `TARGET_PEAK_DBFS`, `DURATION_TOLERANCE_S`, `BIT_DEPTH`: Define audio technical specifications.
-- `DEFAULT_OUT_DIR`: Base directory for all generated outputs.
+- `MODEL_DESIGNER`, `MODEL_ANALYZER`, `MODEL_COMPILER`, `MODEL_ORCHESTRATOR` (or `MODEL_DEFAULT`): Specify LLM models. These are used by `OrchestratorAgent` to get `Model` instances for itself and sub-agents via `OPENROUTER_MODEL_PROVIDER`.
+- `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `DEFAULT_OPENROUTER_MODEL_NAME`: Configure OpenRouter access.
+- `OPENROUTER_MODEL_PROVIDER` (in `phonosyne.sdk.py`): Central provider for `Model` instances. Used in `RunConfig`.
+- `DEFAULT_SR`, `TARGET_PEAK_DBFS`, `DURATION_TOLERANCE_S`, `BIT_DEPTH`: Audio technical specifications.
+- `DEFAULT_OUT_DIR`: Base directory for outputs.
 - `PROMPTS_DIR`: Location of agent system prompt files.
-- `MAX_COMPILER_ITERATIONS`, `COMPILER_TIMEOUT_S` (timeout for inline exec, op limit for LocalPythonExecutor): Control CompilerAgent behavior.
-- `AGENT_MAX_RETRIES`: For LLM API call retries in `AgentBase`.
-- `EXECUTION_MODE`: Defaults to `"local_executor"` (if previous default was "subprocess") or can be set to `"inline"`.
-- `DEFAULT_WORKERS`: Default number of parallel workers for sample processing.
-- `AUTHORIZED_IMPORTS_FOR_DSP` (in `exec_env.py`): Controls what modules generated code can import when using `LocalPythonExecutor`.
+- `MAX_COMPILER_ITERATIONS`: Controls `CompilerAgent`'s internal refinement loop.
+- `EXECUTION_MODE`: For `phonosyne.utils.exec_env.run_code`.
+- `AUTHORIZED_IMPORTS_FOR_DSP` (in `exec_env.py`): For `LocalPythonExecutor`.
 
-This overview describes the main flow and components of the Phonosyne system as implemented up to Step 6.1 of the development plan.
+This overview reflects the Phonosyne system's architecture using the `openai-agents` SDK.
