@@ -56,7 +56,7 @@ def version_callback(value: bool):
 
 
 @app.command(help="Run the Phonosyne sound generation pipeline with a user brief.")
-async def run(  # Changed to async def
+def run(  # Changed to synchronous def
     prompt: str = typer.Argument(
         ..., help="The user's natural-language sound design brief."
     ),
@@ -93,12 +93,10 @@ async def run(  # Changed to async def
     # Removed messages for workers and output_dir as these options are removed.
 
     try:
-        # Call the async SDK function
-        # The verbose flag is used for local logging setup, not passed to sdk_run_prompt directly.
-        # sdk_run_prompt might take **kwargs which could include verbose if OrchestratorAgent handles it.
-        result = await sdk_run_prompt(
-            prompt=prompt, verbose=verbose
-        )  # Pass verbose if agent uses it
+        # Call the async SDK function using asyncio.run() from the synchronous command
+        # The verbose flag is used for local logging setup.
+        # It's also passed as a kwarg to sdk_run_prompt, which passes it to OrchestratorAgent.
+        result = asyncio.run(sdk_run_prompt(prompt=prompt))
 
         console.print("\n🎉 Generation Pipeline Complete!", style="bold green")
 

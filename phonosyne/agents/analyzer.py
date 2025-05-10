@@ -36,6 +36,9 @@ from typing import Any
 from agents import (
     Agent,  # type: ignore # Assuming agents SDK might not be in static analysis path yet
 )
+from agents import (
+    ModelProvider,  # This might not be needed if Agent takes Model instance
+)
 from pydantic import BaseModel, Field  # For AnalyzerInput
 
 from phonosyne import settings
@@ -82,9 +85,11 @@ class AnalyzerAgent(Agent):
 
         Args:
             **kwargs: Additional keyword arguments to pass to the `agents.Agent` constructor.
+                      The 'model' kwarg can be a model name (str) or a Model instance.
         """
         agent_name = kwargs.pop("name", "PhonosyneAnalyzer_Agent")
-        model = kwargs.pop("model", settings.MODEL_ANALYZER)
+        # The 'model' kwarg will be passed in by OrchestratorAgent.
+        model_arg = kwargs.pop("model", settings.MODEL_ANALYZER)
 
         # The `instructions` are the system prompt for the LLM.
         # The actual sound stub data (e.g., from AnalyzerInput) will be passed as `input`
@@ -92,7 +97,7 @@ class AnalyzerAgent(Agent):
         super().__init__(
             name=agent_name,
             instructions=ANALYZER_INSTRUCTIONS,
-            model=model,
+            model=model_arg,  # Pass the model name or Model instance
             output_type=AnalyzerOutput,  # Ensures structured JSON output
             tools=[],  # AnalyzerAgent itself does not use tools
             **kwargs,

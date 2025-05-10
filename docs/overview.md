@@ -113,7 +113,7 @@ The `Manager` iterates through each `SampleStub` in the `DesignerOutput` plan. F
 ## Key Configuration Points (from `phonosyne.settings`)
 
 - `MODEL_DESIGNER`, `MODEL_ANALYZER`, `MODEL_COMPILER`: Specify the LLM models for each agent.
-- `OPENROUTER_API_KEY`: Essential for LLM calls.
+- `OPENAI_API_KEY`: Essential for LLM calls.
 - `DEFAULT_SR`, `TARGET_PEAK_DBFS`, `DURATION_TOLERANCE_S`, `BIT_DEPTH`: Define audio technical specifications.
 - `DEFAULT_OUT_DIR`: Base directory for all generated outputs.
 - `PROMPTS_DIR`: Location of agent system prompt files.

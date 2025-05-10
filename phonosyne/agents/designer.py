@@ -33,6 +33,9 @@ from typing import Any
 from agents import (
     Agent,  # type: ignore # Assuming agents SDK might not be in static analysis path yet
 )
+from agents import (
+    ModelProvider,  # This might not be needed if Agent takes Model instance
+)
 from pydantic import BaseModel, Field  # Retaining for DesignerAgentInput
 
 from phonosyne import settings
@@ -88,19 +91,22 @@ class DesignerAgent(Agent):
         Initializes the DesignerAgent.
 
         Args:
-            **kwargs: Additional keyword arguments to pass to the `agents.Agent` constructor,
-                      allowing overrides for parameters like `model`, `name`, etc.
+            **kwargs: Additional keyword arguments to pass to the `agents.Agent` constructor.
+                      The 'model' kwarg can be a model name (str) or a Model instance.
         """
         # Default configuration for the DesignerAgent instance
         agent_name = kwargs.pop("name", "PhonosyneDesigner_Agent")
-        model = kwargs.pop("model", settings.MODEL_DESIGNER)
+        # The 'model' kwarg will be passed in by OrchestratorAgent.
+        # If not passed, it would default here, but we want Orchestrator to control it.
+        # Defaulting to settings.MODEL_DESIGNER if 'model' is not in kwargs.
+        model_arg = kwargs.pop("model", settings.MODEL_DESIGNER)
 
         # The `instructions` are the system prompt for the LLM.
         # The `user_brief` will be passed as the `input` when `Runner.run(agent, input=user_brief)` is called.
         super().__init__(
             name=agent_name,
             instructions=DESIGNER_INSTRUCTIONS,
-            model=model,
+            model=model_arg,  # Pass the model name or Model instance
             output_type=DesignerOutput,  # Ensures structured JSON output matching DesignerOutput
             tools=[],  # DesignerAgent itself does not use tools
             **kwargs,  # Pass through any other agent parameters

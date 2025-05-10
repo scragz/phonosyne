@@ -45,10 +45,10 @@ class SampleStub(BaseModel):
     seed_description: str = Field(
         ...,
         description="Concise natural-language description of the sound sample (max 200 chars as per plan).",
-        max_length=250,  # Relaxed slightly from plan's 200 for prompt flexibility
     )
     duration_s: float = Field(
-        ..., gt=0, description="Requested duration of the sample in seconds."
+        ...,
+        description="Requested duration of the sample in seconds.",
     )
 
     @field_validator("id")
@@ -66,7 +66,6 @@ class DesignerOutput(BaseModel):
     theme: str = Field(..., description="Brief description of the original user brief.")
     samples: List[SampleStub] = Field(
         ...,
-        min_length=1,  # Each piece must have at least one sample
         description="List of samples within this piece.",
     )
 
@@ -81,7 +80,7 @@ class AnalyzerInput(BaseModel):
     seed_description: str = Field(
         ..., description="The initial seed description from the DesignerAgent."
     )
-    duration_s: float = Field(..., gt=0, description="Requested duration in seconds.")
+    duration_s: float = Field(..., description="Requested duration in seconds.")
     # sample_rate: int = Field(default=settings.DEFAULT_SR, description="Target sample rate in Hz.") # Analyzer prompt implies SR is part of its output
 
 
@@ -98,8 +97,7 @@ class AnalyzerOutput(BaseModel):
     )
     duration: float = Field(
         ...,
-        gt=0,
-        description="Duration of the sound effect in seconds (must be >= 0.1 as per analyzer.md).",
+        description="Duration of the sound effect in seconds.",
     )
     description: str = Field(
         ...,

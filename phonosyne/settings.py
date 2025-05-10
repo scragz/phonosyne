@@ -28,9 +28,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # LLM Model Configuration
-MODEL_DESIGNER: str = os.getenv("MODEL_DESIGNER", "google/gemini-2.5-flash-preview")
-MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", "google/gemini-2.5-flash-preview")
-MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", "google/gemini-2.5-pro-preview-03-25")
+MODEL_DEFAULT: str = os.getenv("MODEL_DEFAULT", "google/gemini-2.5-flash-preview")
+MODEL_DESIGNER: str = os.getenv("MODEL_DESIGNER", MODEL_DEFAULT)
+MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", MODEL_DEFAULT)
+MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", MODEL_DEFAULT)
 
 # Audio Processing Settings
 DEFAULT_SR: int = 48_000  # Default sample rate in Hz
@@ -61,7 +62,18 @@ EXECUTION_MODE: str = os.getenv("PHONOSYNE_EXECUTION_MODE", "subprocess")
 DEFAULT_WORKERS: int = min(os.cpu_count() or 1, 8)
 
 # API Keys - typically loaded from .env
+OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
+
+# OpenRouter Configuration
 OPENROUTER_API_KEY: str | None = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_BASE_URL: str = os.getenv(
+    "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
+)
+# You can set a preferred default model via environment variable,
+# or change the fallback string literal below.
+DEFAULT_OPENROUTER_MODEL_NAME: str = os.getenv(
+    "OPENROUTER_MODEL_NAME", "mistralai/mistral-7b-instruct"  # Example fallback
+)
 
 # Logging
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()

@@ -39,6 +39,9 @@ from typing import Any
 from agents import (
     Agent,  # type: ignore # Assuming agents SDK might not be in static analysis path yet
 )
+from agents import (
+    ModelProvider,  # This might not be needed if Agent takes Model instance
+)
 
 from phonosyne import settings
 from phonosyne.agents.schemas import AnalyzerOutput  # Conceptual input schema
@@ -80,9 +83,11 @@ class CompilerAgent(Agent):
 
         Args:
             **kwargs: Additional keyword arguments to pass to the `agents.Agent` constructor.
+                      The 'model' kwarg can be a model name (str) or a Model instance.
         """
         agent_name = kwargs.pop("name", "PhonosyneCompiler_Agent")
-        model = kwargs.pop("model", settings.MODEL_COMPILER)
+        # The 'model' kwarg will be passed in by OrchestratorAgent.
+        model_arg = kwargs.pop("model", settings.MODEL_COMPILER)
 
         # The tools available to this agent
         # The SDK will use the function signatures and docstrings of these tools
@@ -95,7 +100,7 @@ class CompilerAgent(Agent):
         super().__init__(
             name=agent_name,
             instructions=COMPILER_INSTRUCTIONS,
-            model=model,
+            model=model_arg,  # Pass the model name or Model instance
             tools=agent_tools,
             output_type=str,  # Expects a string (file path) as the final output
             **kwargs,
