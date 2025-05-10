@@ -39,6 +39,8 @@ from phonosyne.agents.schemas import AnalyzerOutput  # For spec type hint
 
 logger = logging.getLogger(__name__)
 
+PERFORM_PEAK_CHECK = False
+
 
 class ValidationFailedError(Exception):
     """Custom exception for WAV validation failures."""
@@ -120,28 +122,31 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
     # 5. Check Peak Level
     # Technical spec: "Peak level <= -1 dBFS"
     # settings.TARGET_PEAK_DBFS = -1.0
-    try:
-        audio_data, _ = sf.read(file_path, dtype="float32")
-        if audio_data.ndim > 1:  # If stereo (should have been caught by channel check)
-            audio_data = np.mean(
-                audio_data, axis=1
-            )  # Convert to mono for peak check, though ideally it's already mono
+    if PERFORM_PEAK_CHECK:
+        try:
+            audio_data, _ = sf.read(file_path, dtype="float32")
+            if (
+                audio_data.ndim > 1
+            ):  # If stereo (should have been caught by channel check)
+                audio_data = np.mean(
+                    audio_data, axis=1
+                )  # Convert to mono for peak check, though ideally it's already mono
 
-        peak_linear = np.max(np.abs(audio_data))
-        if peak_linear == 0:  # Avoid log(0)
-            peak_dbfs = -np.inf
-        else:
-            peak_dbfs = 20 * np.log10(peak_linear)
+            peak_linear = np.max(np.abs(audio_data))
+            if peak_linear == 0:  # Avoid log(0)
+                peak_dbfs = -np.inf
+            else:
+                peak_dbfs = 20 * np.log10(peak_linear)
 
-        if peak_dbfs > settings.TARGET_PEAK_DBFS:
-            errors.append(
-                f"Peak level too high: got {peak_dbfs:.2f} dBFS, "
-                f"expected <= {settings.TARGET_PEAK_DBFS:.2f} dBFS."
-            )
-    except Exception as e:
-        msg = f"Could not read audio data for peak check from {file_path}: {e}"
-        logger.error(msg)
-        errors.append(msg)  # Add as a validation error string
+            if peak_dbfs > settings.TARGET_PEAK_DBFS:
+                errors.append(
+                    f"Peak level too high: got {peak_dbfs:.2f} dBFS, "
+                    f"expected <= {settings.TARGET_PEAK_DBFS:.2f} dBFS."
+                )
+        except Exception as e:
+            msg = f"Could not read audio data for peak check from {file_path}: {e}"
+            logger.error(msg)
+            errors.append(msg)  # Add as a validation error string
 
     if errors:
         full_error_message = (

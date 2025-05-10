@@ -44,6 +44,7 @@ DEFAULT_OUT_DIR: Path = Path("./output")
 PROMPTS_DIR: Path = Path("./prompts")
 
 # Agent & Compiler Settings
+MAX_TURNS: int = 50
 MAX_COMPILER_ITERATIONS: int = (
     10  # Maximum attempts for the CompilerAgent to generate valid code
 )
@@ -55,6 +56,9 @@ AGENT_MAX_RETRIES: int = 3  # Maximum retries for an agent call if it fails
 # "subprocess": Executes generated code in a sandboxed Python subprocess. Safer.
 # "inline": Executes generated code using exec() in the current process. Faster, for testing.
 EXECUTION_MODE: str = os.getenv("PHONOSYNE_EXECUTION_MODE", "subprocess")
+MAX_LLM_CODE_OPERATIONS: int = int(
+    os.getenv("MAX_LLM_CODE_OPERATIONS", 5_000_000)
+)  # Max operations for LocalPythonExecutor
 
 # Concurrency
 # Default number of worker processes for parallel tasks.

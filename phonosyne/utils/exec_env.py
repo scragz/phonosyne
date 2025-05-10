@@ -88,8 +88,6 @@ AUTHORIZED_IMPORTS_FOR_DSP = [
     # "phonosyne.dsp.utils",
     # "phonosyne.dsp.utils.*",
 ]
-# Max operations for LocalPythonExecutor, can be tuned
-MAX_LLM_CODE_OPERATIONS = os.getenv("MAX_LLM_CODE_OPERATIONS", 5_000_000)
 
 
 class CodeExecutionError(Exception):
@@ -109,6 +107,7 @@ def run_code(
     output_filename: str,  # e.g., "sample_01.wav"
     recipe_description: str,
     recipe_duration: float,
+    recipe_json_str: str,  # Added: The full recipe JSON string
     # Default to "local_executor" if settings.EXECUTION_MODE is "subprocess" (old default)
     mode: Literal["local_executor", "inline"] = (
         "local_executor"
@@ -174,16 +173,20 @@ def run_code(
             additional_authorized_imports=AUTHORIZED_IMPORTS_FOR_DSP
         )
         # Initialize static_tools with BASE_PYTHON_TOOLS from smolagents
-        executor.send_tools({})
+        # and add any other necessary built-ins like 'hash'.
+        executor.send_tools({"hash": hash})
         # Inject recipe-specific variables into the executor's state
-        executor.send_variables(
-            {"description": recipe_description, "duration": recipe_duration}
-        )
+        variables_to_send = {
+            "description": recipe_description,
+            "duration": recipe_duration,
+            "recipe_json": recipe_json_str,  # Make the JSON string available as 'recipe_json'
+        }
+        executor.send_variables(variables_to_send)
         # MAX_LLM_CODE_OPERATIONS is not directly used by LocalPythonExecutor's constructor.
         # It might be a setting for a different executor or an older version.
         # For now, we rely on smolagents' internal limits or lack thereof for operations.
         logger.debug(
-            f"LocalPythonExecutor initialized. MAX_LLM_CODE_OPERATIONS (set in env) is {MAX_LLM_CODE_OPERATIONS}, but not directly passed to this executor's constructor."
+            f"LocalPythonExecutor initialized. settings.MAX_LLM_CODE_OPERATIONS (set in env) is {settings.MAX_LLM_CODE_OPERATIONS}, but not directly passed to this executor's constructor."
         )
         try:
             # LocalPythonExecutor.__call__ returns a 3-tuple: (output, logs, is_final_answer)
@@ -294,6 +297,8 @@ def run_code(
 
 
 if __name__ == "__main__":
+    import json  # Added for dummy recipe_json_str
+
     logging.basicConfig(level=logging.DEBUG)
     logger.info("Testing exec_env.py with LocalPythonExecutor logic...")
 
@@ -329,11 +334,19 @@ wave = amplitude * np.sin(2 * np.pi * frequency * t)
     test_output_filename_local = "test_sine_local_executor.wav"
     try:
         logger.info("\n--- Testing 'local_executor' mode ---")
+        dummy_recipe_json_local = json.dumps(
+            {
+                "effect_name": "test_sine_local",
+                "duration": 1.0,
+                "description": "Test sine wave generation",
+            }
+        )
         generated_wav_local = run_code(
             sample_code_local_executor,
             output_filename=test_output_filename_local,
-            recipe_description="Test sine wave generation",  # Added
-            recipe_duration=1.0,  # Added, matches sample_code_local_executor
+            recipe_description="Test sine wave generation",
+            recipe_duration=1.0,
+            recipe_json_str=dummy_recipe_json_local,  # Added
             mode="local_executor",
         )
         logger.info(f"'local_executor' mode generated: {generated_wav_local}")
@@ -364,11 +377,19 @@ sf.write(output_path, wave, sr, subtype='FLOAT')
     test_output_filename_inline = "test_sine_inline_legacy.wav"
     try:
         logger.info("\n--- Testing 'inline' mode (legacy) ---")
+        dummy_recipe_json_inline = json.dumps(
+            {
+                "effect_name": "test_sine_inline",
+                "duration": 0.5,
+                "description": "Test inline sine wave generation",
+            }
+        )
         generated_wav_inline = run_code(
             sample_code_inline_legacy,
             output_filename=test_output_filename_inline,
-            recipe_description="Test inline sine wave generation",  # Added
-            recipe_duration=0.5,  # Added, matches sample_code_inline_legacy
+            recipe_description="Test inline sine wave generation",
+            recipe_duration=0.5,
+            recipe_json_str=dummy_recipe_json_inline,  # Added
             mode="inline",
         )
         logger.info(f"'inline' mode generated: {generated_wav_inline}")

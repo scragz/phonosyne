@@ -153,6 +153,7 @@ async def run_prompt(
     result = await Runner.run(
         starting_agent=orchestrator_agent,
         input=prompt,
+        max_turns=settings.MAX_TURNS,
         run_config=RunConfig(model_provider=OPENROUTER_MODEL_PROVIDER),
         hooks=DEFAULT_LOGGING_HOOKS,  # Add the logging hooks
     )
