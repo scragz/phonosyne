@@ -58,7 +58,7 @@ AGENT_MAX_RETRIES: int = 3  # Maximum retries for an agent call if it fails
 # "inline": Executes generated code using exec() in the current process. Faster, for testing.
 EXECUTION_MODE: str = os.getenv("PHONOSYNE_EXECUTION_MODE", "subprocess")
 MAX_LLM_CODE_OPERATIONS: int = int(
-    os.getenv("MAX_LLM_CODE_OPERATIONS", 5_000_000)
+    os.getenv("MAX_LLM_CODE_OPERATIONS", 50_000_000)
 )  # Max operations for LocalPythonExecutor
 MAX_ORCHESTRATOR_SAMPLE_RETRIES: int = int(
     os.getenv("MAX_ORCHESTRATOR_SAMPLE_RETRIES", 2)
