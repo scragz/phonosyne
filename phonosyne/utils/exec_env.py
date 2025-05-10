@@ -163,7 +163,13 @@ def run_code(
     actual_wav_path = persistent_temp_dir / output_filename
 
     if mode == "local_executor":
-        executor = LocalPythonExecutor(AUTHORIZED_IMPORTS_FOR_DSP)
+        # LocalPythonExecutor from smolagents takes additional_authorized_imports.
+        # It internally manages its own set of base Python tools (like int, float).
+        executor = LocalPythonExecutor(
+            additional_authorized_imports=AUTHORIZED_IMPORTS_FOR_DSP
+        )
+        # Initialize static_tools with BASE_PYTHON_TOOLS from smolagents
+        executor.send_tools({})
         # MAX_LLM_CODE_OPERATIONS is not directly used by LocalPythonExecutor's constructor.
         # It might be a setting for a different executor or an older version.
         # For now, we rely on smolagents' internal limits or lack thereof for operations.
@@ -171,17 +177,32 @@ def run_code(
             f"LocalPythonExecutor initialized. MAX_LLM_CODE_OPERATIONS (set in env) is {MAX_LLM_CODE_OPERATIONS}, but not directly passed to this executor's constructor."
         )
         try:
-            # LocalPythonExecutor executes the code and returns the result of the last expression.
-            # We expect this to be (audio_array, sample_rate).
-            result = executor(code)  # This is the actual execution call
-
-            if not isinstance(result, tuple) or len(result) != 2:
-                raise CodeExecutionError(
-                    "Code executed with LocalPythonExecutor did not return a tuple of (audio_array, sample_rate)."
-                    f" Got: {type(result)}"
+            # LocalPythonExecutor.__call__ returns a 3-tuple: (output, logs, is_final_answer)
+            # The 'output' part is what we expect to be (audio_array, sample_rate).
+            code_output, logs, is_final_answer = executor(
+                code
+            )  # This is the actual execution call
+            logger.debug(f"LocalPythonExecutor logs: {logs}")
+            if (
+                is_final_answer
+            ):  # Phonosyne doesn't use final_answer concept from smolagents here
+                logger.warning(
+                    "LocalPythonExecutor indicated final_answer, which is not expected in this context."
                 )
 
-            audio_data, sample_rate = result
+            if code_output is None:
+                raise CodeExecutionError(
+                    "Code executed with LocalPythonExecutor returned None as its main output. "
+                    "Expected a tuple of (audio_array, sample_rate)."
+                )
+
+            if not isinstance(code_output, tuple) or len(code_output) != 2:
+                raise CodeExecutionError(
+                    "Code executed with LocalPythonExecutor did not return a tuple of (audio_array, sample_rate) as its main output."
+                    f" Got: {type(code_output)}, Value: {code_output!r}"
+                )
+
+            audio_data, sample_rate = code_output
 
             if not isinstance(audio_data, np.ndarray):
                 raise CodeExecutionError(
