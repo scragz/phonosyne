@@ -28,6 +28,7 @@ dependencies = [
   "python-dotenv",
   "tenacity",
   "openai-agents",
+  "librosa",
 ]
 
 [project.optional-dependencies]
