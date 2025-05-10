@@ -89,7 +89,7 @@ class LoggingRunHooks(RunHooks[TContext]):
         agent: Agent[TContext],
     ) -> None:
         logger.info(
-            f"Agent Start: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Context ID: {context.run_id}"
+            f"Agent Start: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}"
         )
 
     async def on_agent_end(
@@ -99,7 +99,7 @@ class LoggingRunHooks(RunHooks[TContext]):
         output: Any,
     ) -> None:
         logger.info(
-            f"Agent End: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Context ID: {context.run_id}, Output: {str(output)[:100]}..."
+            f"Agent End: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Output: {str(output)[:100]}..."
         )  # Log snippet of output
 
     async def on_handoff(
@@ -109,7 +109,7 @@ class LoggingRunHooks(RunHooks[TContext]):
         to_agent: Agent[TContext],
     ) -> None:
         logger.info(
-            f"Handoff: From {from_agent.name if hasattr(from_agent, 'name') else from_agent.__class__.__name__} to {to_agent.name if hasattr(to_agent, 'name') else to_agent.__class__.__name__}, Context ID: {context.run_id}"
+            f"Handoff: From {from_agent.name if hasattr(from_agent, 'name') else from_agent.__class__.__name__} to {to_agent.name if hasattr(to_agent, 'name') else to_agent.__class__.__name__}"
         )
 
     async def on_tool_start(
@@ -119,7 +119,7 @@ class LoggingRunHooks(RunHooks[TContext]):
         tool: Tool,
     ) -> None:
         logger.info(
-            f"Tool Start: {tool.name if hasattr(tool, 'name') else tool.__class__.__name__} by Agent: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Context ID: {context.run_id}"
+            f"Tool Start: {tool.name if hasattr(tool, 'name') else tool.__class__.__name__} by Agent: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}"
         )
 
     async def on_tool_end(
@@ -130,7 +130,7 @@ class LoggingRunHooks(RunHooks[TContext]):
         result: str,
     ) -> None:
         logger.info(
-            f"Tool End: {tool.name if hasattr(tool, 'name') else tool.__class__.__name__} by Agent: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Context ID: {context.run_id}, Result: {str(result)[:100]}..."
+            f"Tool End: {tool.name if hasattr(tool, 'name') else tool.__class__.__name__} by Agent: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Result: {str(result)[:100]}..."
         )  # Log snippet of result
 
 

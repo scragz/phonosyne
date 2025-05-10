@@ -30,3 +30,4 @@ notebooks/
 scraper/
 *.ipynb_checkpoints
 *.egg-info
+.clinerules/
