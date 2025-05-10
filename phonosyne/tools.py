@@ -38,27 +38,45 @@ from phonosyne.utils.exec_env import run_code as existing_run_code
 
 
 @function_tool
-async def execute_python_dsp_code(code: str, output_filename: str) -> str:
+async def execute_python_dsp_code(
+    code: str, output_filename: str, recipe_json: str
+) -> str:
     """
     Executes the provided Python DSP code safely and saves the output as a temporary .wav file.
     The DSP code must return a tuple: (numpy_array, sample_rate).
+    The 'description' and 'duration' from the recipe_json will be available in the executed code's scope.
 
     Args:
         code: The Python DSP code string to execute.
         output_filename: Desired unique name for the output .wav file (e.g., "effect_attempt_1.wav").
+        recipe_json: A JSON string of the synthesis recipe (AnalyzerOutput schema)
+                     containing 'description' and 'duration'.
 
     Returns:
         Path to the generated temporary .wav file if successful, or an error message string.
     """
     try:
+        recipe_data = json.loads(recipe_json)
+        description = recipe_data.get("description")
+        duration = recipe_data.get("duration")
+
+        if description is None or duration is None:
+            return "Error: 'description' or 'duration' missing from recipe_json."
+
         # existing_run_code is synchronous. The openai-agents SDK's @function_tool
         # should handle running synchronous functions in a thread pool if called from an async agent.
         # If direct async execution of run_code is required, run_code itself would need to be async
         # or wrapped with asyncio.to_thread. For now, assuming SDK handles it.
         wav_path: Path = existing_run_code(
-            code=code, output_filename=output_filename, mode="local_executor"
+            code=code,
+            output_filename=output_filename,
+            recipe_description=str(description),  # Ensure string type for description
+            recipe_duration=float(duration),  # Ensure float type for duration
+            mode="local_executor",
         )
         return str(wav_path)
+    except json.JSONDecodeError as e:
+        return f"JSONDecodeError for recipe_json: {str(e)}"
     except CodeExecutionError as e:
         return f"CodeExecutionError: {str(e)}"
     except Exception as e:

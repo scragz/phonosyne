@@ -26,10 +26,11 @@ The target sample rate for all generated audio is **48000 Hz**.
 
 1. **`PythonCodeExecutionTool`**:
 
-   - **Purpose**: Safely executes a given string of Python DSP code. The Python code you provide to this tool **must** be written to return a tuple: `(numpy_audio_array, sample_rate_int)`.
+   - **Purpose**: Safely executes a given string of Python DSP code. The Python code you provide to this tool **must** be written to return a tuple: `(numpy_audio_array, sample_rate_int)`. The `description` and `duration` from the `recipe_json` will be made available to the executed script's global scope.
    - **Input Arguments for this Tool**:
      - `code: str` (The Python DSP script you generate).
      - `output_filename: str` (A unique filename you should create for the temporary WAV, e.g., using `effect_name` and current attempt number like `effect_name_attempt_1.wav`).
+     - `recipe_json: str` (The JSON string of the synthesis recipe, conforming to `AnalyzerOutput` schema, which you received as input. This is needed by the tool to extract `description` and `duration` for the execution environment).
    - **Output from this Tool**:
      - If successful: A string path to the temporary `.wav` file (this file is created by the tool from the numpy array your script returned).
      - If failed (e.g., script error, wrong return type): An error message string.
@@ -65,7 +66,7 @@ For each attempt (up to 10):
 
 2. **Execute Generated Code**:
 
-   - Call the `PythonCodeExecutionTool` with your generated Python `code` string and a unique `output_filename` (e.g., `{effect_name}_attempt{N}.wav`).
+   - Call the `PythonCodeExecutionTool` with your generated Python `code` string, a unique `output_filename` (e.g., `{effect_name}_attempt{N}.wav`), and the `recipe_json` string (which is your main input as the CompilerAgent).
 
 3. **Evaluate Execution Outcome**:
 

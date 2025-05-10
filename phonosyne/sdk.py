@@ -36,6 +36,8 @@ openrouter_client = AsyncOpenAI(
     base_url=settings.OPENROUTER_BASE_URL,
     api_key=settings.OPENROUTER_API_KEY,
     default_headers={
+        "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/scragz/phonosyne",
         "X-Title": "Phonosyne",
     },

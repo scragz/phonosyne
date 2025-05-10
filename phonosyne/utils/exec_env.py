@@ -107,6 +107,8 @@ class SecurityException(CodeExecutionError):  # Keep for compatibility if used e
 def run_code(
     code: str,
     output_filename: str,  # e.g., "sample_01.wav"
+    recipe_description: str,
+    recipe_duration: float,
     # Default to "local_executor" if settings.EXECUTION_MODE is "subprocess" (old default)
     mode: Literal["local_executor", "inline"] = (
         "local_executor"
@@ -122,6 +124,7 @@ def run_code(
 
     For "local_executor" mode:
     - Executes `code` using `LocalPythonExecutor`.
+    - The `code` can expect `description` (str) and `duration` (float) to be available in its global scope.
     - `code` MUST return a tuple: `(numpy.ndarray, int)` representing (audio_data, sample_rate).
     - This function then saves the audio_data as a .wav file.
 
@@ -133,6 +136,8 @@ def run_code(
     Args:
         code: The Python code string to execute.
         output_filename: Desired name for the output .wav file (e.g., "sample_01.wav").
+        recipe_description: The natural language description for synthesis.
+        recipe_duration: The target duration in seconds for the audio.
         mode: Execution mode: "local_executor" or "inline".
         timeout_s: Timeout in seconds (currently only relevant for "inline" or future modes).
 
@@ -170,6 +175,10 @@ def run_code(
         )
         # Initialize static_tools with BASE_PYTHON_TOOLS from smolagents
         executor.send_tools({})
+        # Inject recipe-specific variables into the executor's state
+        executor.send_variables(
+            {"description": recipe_description, "duration": recipe_duration}
+        )
         # MAX_LLM_CODE_OPERATIONS is not directly used by LocalPythonExecutor's constructor.
         # It might be a setting for a different executor or an older version.
         # For now, we rely on smolagents' internal limits or lack thereof for operations.
@@ -323,6 +332,8 @@ wave = amplitude * np.sin(2 * np.pi * frequency * t)
         generated_wav_local = run_code(
             sample_code_local_executor,
             output_filename=test_output_filename_local,
+            recipe_description="Test sine wave generation",  # Added
+            recipe_duration=1.0,  # Added, matches sample_code_local_executor
             mode="local_executor",
         )
         logger.info(f"'local_executor' mode generated: {generated_wav_local}")
@@ -356,6 +367,8 @@ sf.write(output_path, wave, sr, subtype='FLOAT')
         generated_wav_inline = run_code(
             sample_code_inline_legacy,
             output_filename=test_output_filename_inline,
+            recipe_description="Test inline sine wave generation",  # Added
+            recipe_duration=0.5,  # Added, matches sample_code_inline_legacy
             mode="inline",
         )
         logger.info(f"'inline' mode generated: {generated_wav_inline}")
