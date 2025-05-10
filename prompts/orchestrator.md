@@ -58,9 +58,10 @@ Your workflow should generally follow these steps:
 4. **Loop to Next Sound**: Repeat step 3 for the next sound stub in the design plan until all 18 sounds have been created successfully.
 
 5. **Finalization**: After attempting to process all sounds in the plan:
-   a. Aggregate all the collected information: the original user brief, the complete design plan, the status and details for each individual sample, including final file paths or specific error messages, and any relevant timing or metadata.
-   b. Structure this aggregated data into a single, comprehensive JSON object that will form the content of your `manifest.json`.
-   c. Use the `ManifestGeneratorTool`, providing it with the JSON data string from the previous step and the path to your run-specific output directory, to write the `manifest.json` file.
+
+   - a. Aggregate all the collected information: the original user brief, the complete design plan, the status and details for each individual sample, including final file paths or specific error messages, and any relevant timing or metadata.
+   - b. **CRITICAL**: Structure this aggregated data into a single, comprehensive, and valid JSON object. Your output for this specific sub-step MUST BE ONLY THE JSON STRING ITSELF, without any surrounding text, explanations, or markdown code block formatting (e.g., no \`\`\`json ... \`\`\` markers). This raw JSON string will be directly passed to the `ManifestGeneratorTool`.
+   - c. Use the `ManifestGeneratorTool`. For its `manifest_data_json` argument, provide _exactly_ the raw JSON string you generated in step 5.b. For the `output_directory` argument, provide the path to your run-specific output directory. This tool will write the `manifest.json` file.
 
 6. **Reporting**: Conclude by providing a summary of the entire operation, including the overall status (e.g., "completed_successfully", "completed_with_errors"), the total number of sounds planned, the number successfully generated, and the path to the output directory containing the library and the manifest. This summary is your designated final output. Do not conclude your work or provide a final string output until this step is fully executed.
 
