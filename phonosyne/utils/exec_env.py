@@ -163,12 +163,12 @@ def run_code(
     actual_wav_path = persistent_temp_dir / output_filename
 
     if mode == "local_executor":
-        executor = LocalPythonExecutor(
-            authorized_imports=AUTHORIZED_IMPORTS_FOR_DSP,
-            max_operations=MAX_LLM_CODE_OPERATIONS,
-        )
+        executor = LocalPythonExecutor(AUTHORIZED_IMPORTS_FOR_DSP)
+        # MAX_LLM_CODE_OPERATIONS is not directly used by LocalPythonExecutor's constructor.
+        # It might be a setting for a different executor or an older version.
+        # For now, we rely on smolagents' internal limits or lack thereof for operations.
         logger.debug(
-            f"LocalPythonExecutor initialized with max_operations={MAX_LLM_CODE_OPERATIONS}"
+            f"LocalPythonExecutor initialized. MAX_LLM_CODE_OPERATIONS (set in env) is {MAX_LLM_CODE_OPERATIONS}, but not directly passed to this executor's constructor."
         )
         try:
             # LocalPythonExecutor executes the code and returns the result of the last expression.
