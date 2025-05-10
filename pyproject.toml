@@ -27,6 +27,7 @@ dependencies = [
   "pydantic",
   "python-dotenv",
   "tenacity",
+  "openai-agents",
 ]
 
 [project.optional-dependencies]

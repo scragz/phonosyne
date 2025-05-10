@@ -23,8 +23,9 @@ Key features:
 - Error messages from the pipeline should be caught and presented clearly to the user.
 """
 
+import asyncio
 import logging
-from pathlib import Path  # Moved import to top
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -55,33 +56,16 @@ def version_callback(value: bool):
 
 
 @app.command(help="Run the Phonosyne sound generation pipeline with a user brief.")
-def run(
+async def run(  # Changed to async def
     prompt: str = typer.Argument(
         ..., help="The user's natural-language sound design brief."
-    ),
-    workers: Optional[int] = typer.Option(
-        None,  # Default will be handled by Manager using settings.DEFAULT_WORKERS
-        "--workers",
-        "-w",
-        help="Number of parallel workers. 0 for serial. Defaults to system/settings config.",
-        min=0,  # Allow 0 for serial
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose logging output.", is_flag=True
     ),
-    output_dir: Optional[
-        Path
-    ] = typer.Option(  # typer.Path doesn't exist, use pathlib.Path
-        None,  # Default will be handled by Manager using settings.DEFAULT_OUT_DIR
-        "--output-dir",
-        "-o",
-        help="Custom base output directory. Defaults to './output'.",
-        # Note: Typer needs `path_type=Path` if it supported it directly.
-        # For now, we'll take string and convert, or let Manager handle Path conversion.
-        # The Manager already uses settings.DEFAULT_OUT_DIR.
-        # This CLI option would override it if Manager is adapted or if we set settings here.
-        # For now, this option is illustrative; Manager's current output path is not easily changed post-init.
-    ),
+    # output_dir option removed as it's not directly used by the new run_prompt
+    # and OrchestratorAgent handles its own output directory logic based on instructions.
+    # workers option removed as num_workers is no longer a parameter to run_prompt.
 ):
     """
     Runs the Phonosyne sound generation pipeline.
@@ -106,28 +90,15 @@ def run(
         Panel(Text(f"Phonosyne v{__version__}", justify="center", style="bold green"))
     )
     console.print(f'🚀 Starting generation for prompt: "{prompt}"', style="cyan")
-    if workers is not None:
-        console.print(
-            f"🛠️  Using {workers if workers > 0 else 'serial'} worker(s).", style="dim"
-        )
-    if output_dir:
-        # This is tricky as Manager's output_base_dir is set at init from settings.
-        # To make this work, we'd need to either:
-        # 1. Modify settings.DEFAULT_OUT_DIR before Manager init (global state change, not ideal)
-        # 2. Pass output_dir to Manager and have it use it. (Manager needs update)
-        # For now, this option is noted but not fully plumbed through Manager.
-        console.print(
-            f"📂 Custom output directory specified: {output_dir} (Note: Manager needs to support this)",
-            style="yellow",
-        )
+    # Removed messages for workers and output_dir as these options are removed.
 
     try:
-        # Call the SDK function
-        result = sdk_run_prompt(
-            prompt=prompt,
-            num_workers=workers,  # Manager handles None by using default
-            verbose=verbose,
-        )
+        # Call the async SDK function
+        # The verbose flag is used for local logging setup, not passed to sdk_run_prompt directly.
+        # sdk_run_prompt might take **kwargs which could include verbose if OrchestratorAgent handles it.
+        result = await sdk_run_prompt(
+            prompt=prompt, verbose=verbose
+        )  # Pass verbose if agent uses it
 
         console.print("\n🎉 Generation Pipeline Complete!", style="bold green")
 
@@ -135,38 +106,27 @@ def run(
         summary_table.add_column("Metric", style="dim")
         summary_table.add_column("Value")
 
-        summary_table.add_row(
-            "Status",
-            Text(
-                str(result.get("status")),
-                style=(
-                    "bold green"
-                    if result.get("status") == "success"
-                    else (
-                        "bold yellow"
-                        if result.get("status") == "partial_success"
-                        else "bold red"
-                    )
-                ),
-            ),
-        )
-        summary_table.add_row("Total Samples Planned", str(result.get("total_planned")))
-        summary_table.add_row(
-            "Samples Successfully Rendered", str(result.get("rendered"))
-        )
-        summary_table.add_row("Output Directory", str(result.get("output_dir")))
+        # The result from the new run_prompt is expected to be a string summary.
+        # We need to adapt how results are displayed.
+        # For now, just print the string result.
+        # A more structured result from OrchestratorAgent (e.g. a JSON string or Pydantic model)
+        # would allow for a richer summary table like before.
+        # Assuming result is the final string output from OrchestratorAgent.
+        console.print(Panel(Text(str(result), style="bold green"), title="Run Result"))
 
-        console.print(summary_table)
-
-        if result.get("status") != "success":
+        # A simple check: if the result string contains "error" or "fail", exit with code 1.
+        # This is a basic way to indicate issues until a more structured result is implemented.
+        if "error" in str(result).lower() or "fail" in str(result).lower():
             error_console.print(
-                f"Some samples may have failed. Check logs and manifest.json in the output directory for details."
+                f"The generation process reported issues. Please check the output message and logs for details."
             )
             raise typer.Exit(code=1)
 
     except Exception as e:
-        error_console.print(f"\n💥 An error occurred during the Phonosyne pipeline:")
-        error_console.print(str(e))
+        error_console.print(
+            f"\n💥 An critical error occurred in the CLI or Phonosyne pipeline:"
+        )
+        error_console.print(str(e))  # Ensure e is converted to string
         if verbose:
             # In verbose mode, the full traceback would have been logged by the logger.
             # For non-verbose, we might want to print it here.
@@ -195,8 +155,5 @@ def main_callback(
 if __name__ == "__main__":
     # This allows running the CLI directly using `python phonosyne/cli.py run ...`
     # For production, it's better to install the package and use the entry point.
+    # Typer handles running async command functions correctly.
     app()
-
-# Need to import Path for Typer Option type hint if used, but Typer doesn't directly support it.
-# For now, output_dir is illustrative.
-# from pathlib import Path # Commented out / removed from bottom

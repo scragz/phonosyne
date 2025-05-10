@@ -1,182 +1,111 @@
 """
-Designer Agent for Phonosyne
+Designer Agent for Phonosyne (Refactored for agents SDK)
 
 This module defines the `DesignerAgent`, which is responsible for the first stage
 of the Phonosyne pipeline: taking a user's sound design brief and expanding it
-into a structured plan for an 18-sample, 6-movement sound collection.
+into a structured plan. It now uses the `agents` SDK.
 
 Key features:
-- Inherits from `AgentBase` for common LLM interaction logic.
-- Uses the `prompts/designer.md` template for its LLM calls.
-- Takes a user brief (string) as input.
+- Inherits from `agents.Agent`.
+- Instructions are loaded from `prompts/designer.md`.
+- Takes a user brief (string) as input when run.
 - Outputs a JSON object conforming to the `DesignerOutput` Pydantic schema,
-  detailing movements and sample descriptions.
-- Handles parsing of the LLM's JSON output.
+  facilitated by the `output_type` parameter of `agents.Agent`.
 
 @dependencies
-- `phonosyne.agents.base.AgentBase`
+- `agents.Agent` (from the new SDK)
 - `phonosyne.agents.schemas.DesignerOutput` (for output validation)
-- `phonosyne.agents.schemas.AnalyzerInput` (as a conceptual input type, though Designer takes a string)
+- `phonosyne.agents.schemas.DesignerAgentInput` (for input clarity)
 - `phonosyne.settings` (for `MODEL_DESIGNER`)
-- `pydantic.BaseModel` (for a simple input wrapper if needed, though a string is fine)
 - `logging`
+- `pathlib`
 
 @notes
-- The agent is designed to be stateless.
-- The prompt template (`designer.md`) is crucial for guiding the LLM
-  to produce the correct JSON structure.
-- JSON parsing and validation are key responsibilities of this agent.
+- The agent's core execution logic (LLM calls, output parsing) is handled by the SDK.
+- The prompt template (`designer.md`) is crucial for guiding the LLM.
 """
 
 import logging
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError  # For a simple input wrapper
+# Import the new Agent class from the SDK
+from agents import (
+    Agent,  # type: ignore # Assuming agents SDK might not be in static analysis path yet
+)
+from pydantic import BaseModel, Field  # Retaining for DesignerAgentInput
 
 from phonosyne import settings
-from phonosyne.agents.base import AgentBase
-from phonosyne.agents.schemas import DesignerOutput  # For output
+from phonosyne.agents.schemas import DesignerOutput
 
 logger = logging.getLogger(__name__)
 
 
+# --- Define Input Schema ---
 class DesignerAgentInput(BaseModel):
     """
-    Pydantic model for the input to the DesignerAgent's run method.
-    Wraps the user brief string for consistency with AgentBase.process.
+    Pydantic model for the input to the DesignerAgent.
+    Wraps the user brief string. Useful if the agent is run directly
+    with structured input, though as a tool it often receives a plain string.
     """
 
     user_brief: str = Field(..., description="The user's sound design brief.")
 
 
-class DesignerAgent(AgentBase[DesignerAgentInput, DesignerOutput]):
+# --- Load Instructions ---
+# Assuming this file is phonosyne/agents/designer.py
+# Project root is three levels up from this file's directory.
+# phonosyne/agents/designer.py -> phonosyne/agents/ -> phonosyne/ -> project_root/
+try:
+    PROMPT_FILE_PATH = (
+        Path(__file__).resolve().parent.parent.parent / "prompts" / "designer.md"
+    )
+    with open(PROMPT_FILE_PATH, "r", encoding="utf-8") as f:
+        DESIGNER_INSTRUCTIONS = f.read()
+except FileNotFoundError:
+    logger.error(
+        f"CRITICAL: Designer prompt file not found at {PROMPT_FILE_PATH}. "
+        "DesignerAgent will not function correctly."
+    )
+    DESIGNER_INSTRUCTIONS = (
+        "ERROR: Designer prompt not loaded. "
+        "Your task is to take a user brief and expand it into a detailed sound design plan."
+    )
+
+
+# --- Define Agent ---
+class DesignerAgent(Agent):
     """
-    The DesignerAgent expands a user brief into a detailed plan for sound generation.
+    The DesignerAgent expands a user brief into a detailed plan for sound generation,
+    using the `agents.Agent` SDK.
+    Its instructions are loaded from `prompts/designer.md`.
+    The user brief is provided as input when this agent is run.
+    It aims to output a JSON string conforming to the DesignerOutput schema.
     """
 
-    agent_name = "DesignerAgent"
-    prompt_template_name = "designer.md"  # Corresponds to prompts/designer.md
-    input_schema = DesignerAgentInput
-    output_schema = DesignerOutput
-    llm_model_name = settings.MODEL_DESIGNER
-
-    def run(self, inputs: DesignerAgentInput, **kwargs: Any) -> DesignerOutput:
+    def __init__(self, **kwargs: Any):
         """
-        Executes the DesignerAgent's logic.
+        Initializes the DesignerAgent.
 
         Args:
-            inputs: A DesignerAgentInput Pydantic model containing the user_brief.
-            **kwargs: Additional keyword arguments (not currently used by this agent).
-
-        Returns:
-            A DesignerOutput Pydantic model representing the structured plan.
-
-        Raises:
-            ValueError: If the prompt template is not loaded.
-            pydantic.ValidationError: If the LLM output fails to parse or validate.
-            Various APIError from _llm_call.
+            **kwargs: Additional keyword arguments to pass to the `agents.Agent` constructor,
+                      allowing overrides for parameters like `model`, `name`, etc.
         """
-        if not self.prompt_template:
-            logger.error("DesignerAgent prompt template not loaded.")
-            raise ValueError(
-                "Prompt template is essential for DesignerAgent but not loaded."
-            )
+        # Default configuration for the DesignerAgent instance
+        agent_name = kwargs.pop("name", "PhonosyneDesigner_Agent")
+        model = kwargs.pop("model", settings.MODEL_DESIGNER)
 
-        user_brief = inputs.user_brief
-
-        # The designer.md prompt is a system prompt.
-        # The user_brief should be injected into a user message, or the system prompt
-        # should be structured to take the brief as a variable.
-        # Current designer.md has "User Brief: {{user_brief}}"
-        # So, we format the system prompt itself.
-
-        # Let's assume the entire designer.md is the system prompt,
-        # and it contains a placeholder for the user_brief.
-        # This is slightly different from typical system + user message structure.
-        # Alternative: designer.md is system, user_brief is user message.
-        # For now, follow the {{user_brief}} in designer.md.
-
-        # If designer.md is a system prompt that itself takes the brief:
-        formatted_system_prompt = self.prompt_template.replace(
-            "{{user_brief}}", user_brief
+        # The `instructions` are the system prompt for the LLM.
+        # The `user_brief` will be passed as the `input` when `Runner.run(agent, input=user_brief)` is called.
+        super().__init__(
+            name=agent_name,
+            instructions=DESIGNER_INSTRUCTIONS,
+            model=model,
+            output_type=DesignerOutput,  # Ensures structured JSON output matching DesignerOutput
+            tools=[],  # DesignerAgent itself does not use tools
+            **kwargs,  # Pass through any other agent parameters
         )
 
-        # The LLM call for DesignerAgent needs to produce a single line of JSON.
-        # The prompt itself instructs the LLM to do this.
-        # We might not need to use OpenAI's JSON mode if the prompt is strong enough.
-        # If JSON mode is used, the system prompt must also instruct it.
 
-        logger.info(f"Running DesignerAgent with user brief: '{user_brief[:100]}...'")
-
-        # The designer.md prompt is more like a full request, not just a system message.
-        # Let's treat the formatted prompt as the main user message.
-        # No separate system prompt for this agent, as designer.md contains all instructions.
-        raw_llm_output = self._llm_call(
-            prompt=formatted_system_prompt,  # The entire designer.md content, formatted
-            temperature=0.5,  # Designer needs to be creative but structured
-            max_tokens=3072,  # Allow ample space for 18 samples in JSON (approx 2k-4k tokens)
-            # system_prompt=None, # designer.md acts as the full prompt
-            json_mode=False,  # Relying on prompt for JSON structure, as OpenRouter JSON mode varies
-        )
-
-        logger.debug(f"DesignerAgent raw LLM output: {raw_llm_output}")
-
-        # Parse the raw LLM output string into the DesignerOutput Pydantic model
-        try:
-            parsed_output = self._parse_output(raw_llm_output)
-            return parsed_output
-        except ValidationError as e:
-            logger.error(f"DesignerAgent output validation failed: {e}")
-            # Potentially add a repair loop here or rely on orchestrator's retries
-            # For now, re-raise to indicate failure at this stage.
-            raise
-        except Exception as e:
-            logger.error(
-                f"Unexpected error parsing DesignerAgent output: {e}", exc_info=True
-            )
-            logger.error(f"Problematic raw output from LLM: {raw_llm_output}")
-            raise
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-
-    # This test requires OPENROUTER_API_KEY to be set in .env
-    # and phonosyne.settings to be importable.
-    # It will make a real LLM call.
-
-    if not settings.OPENROUTER_API_KEY:
-        print("Skipping DesignerAgent test: OPENROUTER_API_KEY not set.")
-    else:
-        print("Testing DesignerAgent (will make a real LLM call)...")
-        designer_agent = DesignerAgent()
-
-        test_brief = "A collection of sounds representing a futuristic cityscape, with a sense of melancholy and wonder."
-
-        # Use the process method for input validation
-        raw_input_data = {"user_brief": test_brief}
-
-        try:
-            design_plan = designer_agent.process(raw_input_data)
-            print("\nDesignerAgent Test Output:")
-            print(design_plan.model_dump_json(indent=2))
-
-            # Basic checks on the output
-            assert (
-                len(design_plan.movements) > 0
-            ), "DesignerOutput should have at least one movement."
-            if design_plan.movements:
-                assert (
-                    len(design_plan.movements[0].samples) > 0
-                ), "First movement should have samples."
-            print("\nDesignerAgent test successful (basic structure checks passed).")
-
-        except ValidationError as e:
-            print(f"\nDesignerAgent Pydantic Validation Error: {e.errors()}")
-        except APIError as e:
-            print(f"\nDesignerAgent API Error: {e}")
-        except Exception as e:
-            print(
-                f"\nAn unexpected error occurred during DesignerAgent test: {e}",
-                exc_info=True,
-            )
+# Note: The old `if __name__ == "__main__":` block has been removed.
+# Testing will be done using `agents.Runner` in dedicated test files (Step 17).

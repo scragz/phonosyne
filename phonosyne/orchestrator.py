@@ -1,590 +1,180 @@
 """
-Orchestrator for the Phonosyne Pipeline
+Orchestrator Agent for the Phonosyne Pipeline (Refactored for agents SDK)
 
-This module defines the `Manager` class, which orchestrates the entire
-Phonosyne sound generation pipeline from user brief to a collection of WAV files.
+This module defines the `OrchestratorAgent`, which replaces the old `Manager`
+and orchestrates the entire Phonosyne sound generation pipeline using the
+`agents` SDK.
 
 Key features:
-- Initializes and uses Designer, Analyzer, and Compiler agents.
-- Manages the overall workflow:
-  1. DesignerAgent: User brief -> Design plan (list of sample stubs).
-  2. For each sample stub (concurrently using ProcessPoolExecutor):
-     a. AnalyzerAgent: Sample stub -> Detailed synthesis recipe (AnalyzerOutput).
-     b. CompilerAgent: Synthesis recipe -> Python DSP code -> Executes code -> WAV file.
-     c. Validator: Validates the generated WAV file.
-- Handles concurrency for processing multiple samples in parallel.
-- Collects results, logs progress, and writes a final manifest.json.
+- Inherits from `agents.Agent`.
+- Uses refactored `DesignerAgent`, `AnalyzerAgent`, `CompilerAgent` as tools.
+- Uses `FileMoverTool` and `ManifestGeneratorTool` (FunctionTools).
+- Manages the overall workflow from user brief to a collection of WAV files
+  and a manifest.json, guided by its instructions.
 
 @dependencies
-- `concurrent.futures.ProcessPoolExecutor` for parallelism.
-- `pathlib.Path` for file system operations.
-- `logging` for detailed logging.
-- `json` for writing the manifest file.
-- `phonosyne.settings` for configuration (e.g., default workers, output directory).
-- `phonosyne.agents` (DesignerAgent, AnalyzerAgent, CompilerAgent, and their schemas).
-- `phonosyne.dsp.validators.validate_wav` and `ValidationFailedError`.
-- `phonosyne.utils.slugify` for creating output directory names.
-- `tqdm` for progress bars (optional).
+- `agents.Agent` (from the new SDK)
+- `phonosyne.agents.designer.DesignerAgent`
+- `phonosyne.agents.analyzer.AnalyzerAgent`
+- `phonosyne.agents.compiler.CompilerAgent`
+- `phonosyne.tools.move_file` (as FileMoverTool)
+- `phonosyne.tools.generate_manifest_file` (as ManifestGeneratorTool)
+- `phonosyne.settings` (for `MODEL_ORCHESTRATOR` or a default model)
+- `logging`
+- `pathlib`
 
 @notes
-- Error handling and retry logic at the orchestrator level (e.g., for a whole sample failing)
-  will be important. Agents have their own internal retries for LLM calls.
-- The manifest.json will summarize the generated collection.
+- The detailed workflow logic will be defined in the agent's `instructions` (Step 13).
+- Error handling and state management across tool calls are crucial for robustness.
 """
 
-import concurrent.futures
-import json
 import logging
-import shutil
-import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 
-from pydantic import BaseModel  # Moved import to top
-from tqdm import tqdm
+# Import the new Agent class from the SDK
+from agents import (
+    Agent,  # type: ignore # Assuming agents SDK might not be in static analysis path yet
+)
+from agents import FunctionTool  # For type hinting if needed, tools are passed directly
 
 from phonosyne import settings
-from phonosyne.agents import SampleStub  # Individual sample from Designer's plan
-from phonosyne.agents import (
-    AnalyzerAgent,
-    AnalyzerInput,
-)
-from phonosyne.agents import (
-    AnalyzerOutput as CompilerInput,  # AnalyzerOutput is input to Compiler
-)
-from phonosyne.agents import (
-    CompilerAgent,
-    DesignerAgent,
-    DesignerAgentInput,
-)
-from phonosyne.agents import (
-    DesignerOutput as DesignPlanSchema,  # Full plan from Designer
-)
-from phonosyne.dsp.validators import ValidationFailedError, validate_wav
-from phonosyne.utils import slugify
+from phonosyne.agents.analyzer import AnalyzerAgent
+from phonosyne.agents.compiler import CompilerAgent
+from phonosyne.agents.designer import DesignerAgent
+
+# Schemas might be needed for parsing outputs if not automatically handled by output_type of sub-agents
+from phonosyne.agents.schemas import AnalyzerOutput, DesignerOutput
+from phonosyne.tools import generate_manifest_file, move_file
 
 logger = logging.getLogger(__name__)
 
+# Detailed Orchestrator Instructions
+ORCHESTRATOR_INSTRUCTIONS = """
+You are the Phonosyne Orchestrator, a meticulous project manager for sound library generation.
+Your primary goal is to take a user's input brief and manage a pipeline of specialized agents and tools to generate a collection of sound effects and a manifest file.
 
-class SampleGenerationResult(BaseModel):  # Requires pydantic import
-    """Pydantic model to store result of a single sample generation task."""
+**Input Processing:**
+1.  The user will provide a natural language `user_brief` as input. Store this brief.
 
-    sample_id: str
-    status: (
-        str  # "success", "failed_analysis", "failed_compilation", "failed_validation"
-    )
-    output_path: Optional[Path] = None
-    error_message: Optional[str] = None
-    attempts: Optional[int] = None  # e.g. compiler attempts
+**Directory and Path Management:**
+2.  You need to define a unique `run_output_directory_name` for this specific generation run. A good format is `YYYYMMDD-HHMMSS_brief_slug`, where `brief_slug` is a short, filesystem-safe version of the user_brief (e.g., first 3-5 words, lowercase, hyphen-separated). Example: `20250509-213000_futuristic-cityscape-sounds`.
+3.  All final WAV files and the `manifest.json` will be placed in this directory. The tools (`FileMoverTool`, `ManifestGeneratorTool`) will create this directory if it doesn't exist when they are called with a path inside it. You must consistently use this `run_output_directory_name` string when constructing target paths for these tools.
 
-    class Config:
-        arbitrary_types_allowed = True
+**Core Workflow - Step-by-Step Tool Usage:**
+4.  **Design Phase:**
+    *   Call the `DesignerAgentTool` with the `user_brief` as input.
+    *   The tool will return a JSON string representing the `DesignPlan`. Parse this JSON string.
+    *   If `DesignerAgentTool` fails or returns invalid JSON, report the error and stop.
+    *   Store the parsed `DesignPlan` (which includes a list of `SampleStub` objects).
+
+5.  **Sample Generation Loop:**
+    *   Initialize an empty list called `sample_generation_results` to store the outcome of each sample.
+    *   Iterate through each `SampleStub` in the `DesignPlan.samples` list. For each `SampleStub`:
+        a.  **Analysis Phase:**
+            *   Prepare the input for `AnalyzerAgentTool`: this is a JSON string representation of the current `SampleStub`.
+            *   Call `AnalyzerAgentTool` with this JSON string.
+            *   The tool returns a JSON string representing the `SynthesisRecipe`. Parse this JSON.
+            *   If `AnalyzerAgentTool` fails or returns invalid JSON for this sample, record the error (including `sample_id` and `seed_description` from the `SampleStub`, and the error message) in `sample_generation_results`. Then, continue to the next `SampleStub`.
+            *   Store the parsed `SynthesisRecipe`.
+
+        b.  **Compilation Phase:**
+            *   The input for `CompilerAgentTool` is the `SynthesisRecipe` (as a JSON string) obtained from `AnalyzerAgentTool`.
+            *   Call `CompilerAgentTool` with this `SynthesisRecipe` JSON string.
+            *   The tool returns a string, which is the path to the temporary validated `.wav` file (`temp_wav_path`).
+            *   If `CompilerAgentTool` fails (e.g., returns an error message instead of a path, or an obviously invalid path), record the error (including `sample_id`, `seed_description`, `SynthesisRecipe`, and the error message) in `sample_generation_results`. Then, continue to the next `SampleStub`.
+            *   Store the `temp_wav_path`.
+
+        c.  **File Finalization Phase (if Compilation Succeeded):**
+            *   Construct the `final_wav_filename`. Use the `sample_id` from the `SampleStub` and the `effect_name` from the `SynthesisRecipe`. A good format is `{sample_id}_{safe_effect_name}.wav`. Ensure `safe_effect_name` is filesystem-safe (e.g., replace spaces/special characters with underscores, or use a slugified version if you can generate one).
+            *   Construct the `final_wav_path` string: `{run_output_directory_name}/{final_wav_filename}`.
+            *   Call `FileMoverTool` with `source_path=temp_wav_path` and `target_path=final_wav_path`.
+            *   If `FileMoverTool` returns an error message, record this error (including `sample_id`, `temp_wav_path`, `final_wav_path`, and error) in `sample_generation_results`. The sample is considered failed at this stage.
+            *   If `FileMoverTool` succeeds, record the success (including `sample_id`, `SynthesisRecipe`, and `final_wav_path`) in `sample_generation_results`.
+
+6.  **Manifest Generation:**
+    *   After iterating through all `SampleStub`s, prepare the `manifest_data`. This should be a comprehensive JSON object containing:
+        *   The original `user_brief`.
+        *   The `run_output_directory_name`.
+        *   The full `DesignPlan` (as a JSON object, not string).
+        *   The list of `sample_generation_results` (each entry detailing `sample_id`, status (e.g., "success", "failed_analysis", "failed_compilation", "failed_file_move"), `final_wav_path` if successful, `SynthesisRecipe` used, and any `error_message`).
+    *   Convert this `manifest_data` object into a JSON string (`manifest_data_json`).
+    *   Call `ManifestGeneratorTool` with `manifest_data_json=manifest_data_json` and `output_directory=run_output_directory_name`.
+    *   If `ManifestGeneratorTool` returns an error, note this failure. The primary sound generation might be complete, but the manifest failed.
+
+**Final Output:**
+7.  Your final output should be a single string message summarizing the entire operation. Include:
+    *   The `run_output_directory_name`.
+    *   The number of samples planned, successfully generated, and failed.
+    *   The path to the `manifest.json` file: `{run_output_directory_name}/manifest.json`.
+    *   Mention if manifest generation itself failed.
+
+**Important Considerations:**
+*   **JSON Handling:** Be meticulous. Outputs from tools like `DesignerAgentTool`, `AnalyzerAgentTool` are JSON strings that YOU must parse. Inputs to tools like `AnalyzerAgentTool` (a `SampleStub`), `CompilerAgentTool` (a `SynthesisRecipe`), and `ManifestGeneratorTool` (the `manifest_data`) must be formatted by YOU as JSON strings.
+*   **Path Construction:** You are responsible for constructing path strings. Tools like `FileMoverTool` and `ManifestGeneratorTool` expect directory and file path strings.
+*   **Error Propagation:** If a tool returns an error message (as a string), treat it as a failure for that step and record it. Do not try to pass error messages as valid data to subsequent tools unless explicitly instructed for a retry mechanism (which is internal to `CompilerAgentTool`).
+*   **Statefulness:** You need to maintain context throughout this process (e.g., `user_brief`, `run_output_directory_name`, `DesignPlan`, `sample_generation_results`).
+*   **Filenames:** When constructing `final_wav_filename`, ensure it's filesystem-safe. A simple approach for `safe_effect_name` is to take `effect_name` from the recipe, convert to lowercase, and replace spaces and non-alphanumeric characters (except dots and underscores) with underscores. Limit its length if necessary.
+"""
 
 
-class Manager:
+class OrchestratorAgent(Agent):
     """
-    Orchestrates the Phonosyne sound generation pipeline.
+    Orchestrates the Phonosyne sound generation pipeline using specialized agents and tools.
     """
 
-    def __init__(self, num_workers: Optional[int] = None, verbose: bool = False):
-        self.num_workers = (
-            num_workers if num_workers is not None else settings.DEFAULT_WORKERS
-        )
-        if self.num_workers == 0:  # 0 means serial execution
-            self.num_workers = 1
-            logger.info("Running in serial mode (1 worker).")
-        else:
-            logger.info(f"Initializing Manager with {self.num_workers} worker(s).")
-
-        self.verbose = verbose  # Controls verbosity of logging / tqdm
-
-        self.designer_agent = DesignerAgent()
-        self.analyzer_agent = AnalyzerAgent()
-        self.compiler_agent = CompilerAgent()
-
-        self.output_base_dir = settings.DEFAULT_OUT_DIR
-        self.output_base_dir.mkdir(parents=True, exist_ok=True)
-
-    def _process_single_sample(
-        self, sample_stub: SampleStub, design_plan_slug: str, run_output_dir: Path
-    ) -> SampleGenerationResult:
+    def __init__(self, **kwargs: Any):
         """
-        Processes a single sample stub through Analyzer, Compiler, and Validator.
-        This method is designed to be run in a separate process by ProcessPoolExecutor.
-        """
-        sample_id = sample_stub.id
-        logger.info(f"[Sample: {sample_id}] Starting processing.")
-
-        try:
-            # 1. AnalyzerAgent
-            logger.debug(f"[Sample: {sample_id}] Running AnalyzerAgent...")
-            analyzer_input = AnalyzerInput(
-                id=sample_id,
-                seed_description=sample_stub.seed_description,
-                duration_s=sample_stub.duration_s,
-            )
-            synthesis_recipe: CompilerInput = self.analyzer_agent.process(
-                analyzer_input.model_dump()
-            )
-            logger.info(
-                f"[Sample: {sample_id}] AnalyzerAgent completed. Effect name: {synthesis_recipe.effect_name}"
-            )
-
-            # 2. CompilerAgent
-            # The CompilerAgent's run method needs the validator_fn.
-            # The actual output path for the WAV will be determined by CompilerAgent/exec_env
-            # and then potentially moved/renamed by the orchestrator.
-            # For now, CompilerAgent returns a path to a validated WAV in a persistent temp location.
-
-            # The final filename for this sample in the run_output_dir
-            final_sample_filename = (
-                f"{sample_id}_{slugify(synthesis_recipe.effect_name)}.wav"
-            )
-            # Note: CompilerAgent's output_filename in run_code is for its *internal* temp file.
-            # The path returned by compiler_agent.run() is the one we care about.
-
-            logger.debug(
-                f"[Sample: {sample_id}] Running CompilerAgent for '{synthesis_recipe.effect_name}'..."
-            )
-
-            # Pass the validator function to the compiler agent's run method
-            # The CompilerAgent's `run` method expects `inputs: AnalyzerOutput`
-            # and `**kwargs` which can include `validator_fn`.
-            # The `process` method of AgentBase handles input schema validation.
-            # We call `run` directly here as we already have the validated `synthesis_recipe`.
-
-            # The validator needs the `AnalyzerOutput` (synthesis_recipe) for spec.
-            validator_partial = lambda path: validate_wav(path, synthesis_recipe)
-
-            temp_wav_path: Path = self.compiler_agent.run(
-                inputs=synthesis_recipe,
-                validator_fn=validator_partial,  # Pass our validator
-            )
-            logger.info(
-                f"[Sample: {sample_id}] CompilerAgent completed. Temporary WAV at: {temp_wav_path}"
-            )
-
-            # Move the validated WAV from its persistent temporary location to the final run output directory
-            final_wav_path = run_output_dir / final_sample_filename
-            try:
-                shutil.move(str(temp_wav_path), final_wav_path)
-                logger.info(
-                    f"[Sample: {sample_id}] Moved validated WAV to final location: {final_wav_path}"
-                )
-            except Exception as e_move:
-                logger.error(
-                    f"[Sample: {sample_id}] Failed to move WAV from {temp_wav_path} to {final_wav_path}: {e_move}"
-                )
-                # If move fails, try to copy and then delete source, or just report error.
-                # For now, consider it a failure for this sample.
-                return SampleGenerationResult(
-                    sample_id=sample_id,
-                    status="failed_file_operation",
-                    error_message=f"Failed to move WAV: {e_move}",
-                )
-            finally:
-                # Clean up the source temp file if it still exists (e.g. if move failed but we copied)
-                # shutil.move should remove source, but defensive cleanup.
-                if temp_wav_path.exists():
-                    try:
-                        temp_wav_path.unlink()
-                    except OSError:
-                        logger.warning(
-                            f"[Sample: {sample_id}] Could not clean up temp WAV: {temp_wav_path}"
-                        )
-
-            return SampleGenerationResult(
-                sample_id=sample_id, status="success", output_path=final_wav_path
-            )
-
-        except ValidationFailedError as e_val:
-            logger.error(f"[Sample: {sample_id}] Validation failed: {e_val}")
-            return SampleGenerationResult(
-                sample_id=sample_id,
-                status="failed_validation",
-                error_message=str(e_val),
-            )
-        except Exception as e:  # Catch errors from Analyzer or Compiler agents
-            logger.error(
-                f"[Sample: {sample_id}] Processing failed: {type(e).__name__}: {e}",
-                exc_info=self.verbose,
-            )
-            # Determine if it was analysis or compilation stage if possible, for better status
-            # This generic catch might obscure the stage.
-            # For now, assume compilation if recipe was obtained.
-            status = (
-                "failed_analysis"
-                if "synthesis_recipe" not in locals()
-                else "failed_compilation"
-            )
-            return SampleGenerationResult(
-                sample_id=sample_id, status=status, error_message=str(e)
-            )
-
-    def run(self, user_brief: str) -> Dict[str, Any]:
-        """
-        Runs the full Phonosyne pipeline for a given user brief.
+        Initializes the OrchestratorAgent.
 
         Args:
-            user_brief: The natural-language sound design brief from the user.
-
-        Returns:
-            A dictionary summarizing the outcome, including status, number of
-            rendered files, and output directory path.
+            **kwargs: Additional keyword arguments to pass to the `agents.Agent` constructor.
         """
-        start_time = time.time()
-        logger.info(f"Phonosyne pipeline started for brief: '{user_brief[:100]}...'")
-
-        # 1. Call DesignerAgent to get the design plan
-        try:
-            logger.info("Running DesignerAgent...")
-            designer_input = DesignerAgentInput(user_brief=user_brief)
-            design_plan: DesignPlanSchema = self.designer_agent.process(
-                designer_input.model_dump()
-            )
-            logger.info(
-                f"DesignerAgent completed. Plan theme: {design_plan.theme}, Samples: {len(design_plan.samples)}"
-            )
-        except Exception as e:
-            logger.error(f"DesignerAgent failed: {e}", exc_info=self.verbose)
-            return {
-                "status": "error",
-                "reason": f"DesignerAgent failed: {e}",
-                "rendered": 0,
-                "output_dir": None,
-            }
-
-        brief_slug = slugify(design_plan.theme[:50])
-
-        # Prepare output directory for this run
-        run_output_dir_name = slugify(f"{time.strftime('%Y%m%d-%H%M%S')}_{brief_slug}")
-        run_output_dir = self.output_base_dir / run_output_dir_name
-        run_output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Output directory for this run: {run_output_dir}")
-
-        all_sample_stubs: List[SampleStub] = design_plan.samples
-
-        num_total_samples = len(all_sample_stubs)
-        logger.info(f"Total samples to generate: {num_total_samples}")
-
-        results: List[SampleGenerationResult] = []
-
-        # 2. Process each sample stub (concurrently or serially)
-        # Use ProcessPoolExecutor for true parallelism if num_workers > 1
-        # Note: Agent instances (self.analyzer_agent, self.compiler_agent) are not directly
-        # picklable for ProcessPoolExecutor if they contain unpicklable state (like HTTP clients).
-        # AgentBase initializes its OpenAI client in __init__.
-        # This means _process_single_sample needs to instantiate its own agents,
-        # or we need to ensure agents are picklable / use a different concurrency model.
-
-        # For ProcessPoolExecutor, the target function `_process_single_sample`
-        # cannot be a method of `self` if `self` (Manager instance) is not picklable
-        # due to containing agent instances with HTTP clients.
-        # A common pattern is to make the worker function a static method or top-level function,
-        # passing all necessary data.
-
-        # Simpler approach for now: if num_workers > 1, it implies agents might need to be
-        # re-initialized in the worker or made picklable.
-        # Let's assume for now that the agents are sufficiently picklable or that
-        # the overhead of re-init is acceptable for the number of tasks.
-        # If not, `_process_single_sample` would need to become a staticmethod or top-level
-        # function that re-creates agents.
-
-        # Given AgentBase initializes OpenAI client, it's not picklable.
-        # So, _process_single_sample must be a static method or top-level,
-        # and it must create its own agent instances.
-        # This means we can't use self.analyzer_agent etc. inside it.
-        # This is a significant refactor of _process_single_sample.
-
-        # Let's adjust _process_single_sample to be a static method.
-        # This means it won't have access to self.analyzer_agent etc.
-        # It will need to instantiate them.
-
-        # For now, to keep moving, I'll assume serial execution or ThreadPoolExecutor
-        # if agents are not picklable. True CPU-bound parallelism for LLM calls (which are I/O bound)
-        # and DSP code (CPU bound) is tricky.
-        # If num_workers is for parallel LLM calls, ThreadPoolExecutor is fine.
-        # If it's for parallel DSP code execution (via LocalPythonExecutor), ProcessPoolExecutor is better.
-        # LocalPythonExecutor itself is CPU bound.
-
-        # Let's use ThreadPoolExecutor for now, as LLM calls are I/O bound.
-        # This avoids pickling issues with agent instances.
-        # If DSP becomes a bottleneck, might need a hybrid approach or make agents picklable.
-
-        executor_class = (
-            concurrent.futures.ThreadPoolExecutor if self.num_workers > 1 else None
+        agent_name = kwargs.pop("name", "PhonosyneOrchestrator_Agent")
+        # Assuming a model for the orchestrator, or use a general powerful model
+        model = kwargs.pop(
+            "model", getattr(settings, "MODEL_ORCHESTRATOR", settings.MODEL_DEFAULT)
         )
 
-        if executor_class:
-            with executor_class(max_workers=self.num_workers) as executor:
-                futures_map = {
-                    executor.submit(
-                        Manager._static_process_single_sample,
-                        stub,
-                        brief_slug,
-                        run_output_dir,
-                        self.verbose,
-                    ): stub
-                    for stub in all_sample_stubs
-                }
+        # Instantiate specialist agents
+        designer_agent_instance = DesignerAgent()
+        analyzer_agent_instance = AnalyzerAgent()
+        compiler_agent_instance = CompilerAgent()
 
-                # Setup tqdm progress bar if not verbose (verbose might have its own detailed logs)
-                progress_bar = tqdm(
-                    concurrent.futures.as_completed(futures_map),
-                    total=num_total_samples,
-                    desc="Processing samples",
-                    disable=self.verbose,  # Disable tqdm if verbose logging is on
-                )
-                for future in progress_bar:
-                    sample_stub = futures_map[future]
-                    try:
-                        result = future.result()
-                        results.append(result)
-                    except Exception as e:
-                        logger.error(
-                            f"Error processing sample {sample_stub.id}: {e}",
-                            exc_info=self.verbose,
-                        )
-                        results.append(
-                            SampleGenerationResult(
-                                sample_id=sample_stub.id,
-                                status="failed_orchestration",
-                                error_message=str(e),
-                            )
-                        )
-                    progress_bar.set_postfix_str(
-                        f"Last: {sample_stub.id} {results[-1].status if results else ''}"
-                    )
-        else:  # Serial execution
-            logger.info("Processing samples serially...")
-            for stub in tqdm(
-                all_sample_stubs,
-                desc="Processing samples serially",
-                disable=self.verbose,
-            ):
-                try:
-                    result = Manager._static_process_single_sample(
-                        stub, brief_slug, run_output_dir, self.verbose
-                    )
-                    results.append(result)
-                except Exception as e:
-                    logger.error(
-                        f"Error processing sample {stub.id}: {e}", exc_info=self.verbose
-                    )
-                    results.append(
-                        SampleGenerationResult(
-                            sample_id=stub.id,
-                            status="failed_orchestration",
-                            error_message=str(e),
-                        )
-                    )
+        # Prepare tools for the OrchestratorAgent
+        agent_tools: List[Any] = [
+            designer_agent_instance.as_tool(
+                tool_name="DesignerAgentTool",
+                tool_description="Expands a user's sound design brief into a structured plan (JSON) detailing themes and individual sound stubs with descriptions and target durations. Input is the user brief string.",
+            ),
+            analyzer_agent_instance.as_tool(
+                tool_name="AnalyzerAgentTool",
+                tool_description="Takes a single sound stub (JSON from DesignerAgentTool's plan) and enriches it into a detailed, natural-language synthesis recipe (JSON). Input is a JSON string of the sound stub.",
+            ),
+            compiler_agent_instance.as_tool(
+                tool_name="CompilerAgentTool",
+                tool_description="Takes a detailed synthesis recipe (JSON from AnalyzerAgentTool), generates Python DSP code, orchestrates its execution and validation using its internal tools, and returns the path to a validated temporary .wav file (string). Input is a JSON string of the synthesis recipe.",
+            ),
+            move_file,  # FunctionTool for moving files
+            generate_manifest_file,  # FunctionTool for generating the manifest
+        ]
 
-        # 3. Collect results and write manifest
-        successful_samples = [res for res in results if res.status == "success"]
-        failed_samples_count = num_total_samples - len(successful_samples)
-
-        manifest_data = {
-            "user_brief": user_brief,
-            "brief_slug": brief_slug,
-            "output_directory": str(
-                run_output_dir.relative_to(Path.cwd())
-            ),  # Relative path
-            "total_samples_planned": num_total_samples,
-            "total_samples_succeeded": len(successful_samples),
-            "total_samples_failed": failed_samples_count,
-            "generation_time_seconds": time.time() - start_time,
-            "samples": design_plan.model_dump()[
-                "samples"
-            ],  # Include original plan structure
-            "sample_results": [
-                res.model_dump(exclude_none=True, mode="json") for res in results
-            ],  # Store serializable results
-        }
-
-        manifest_path = run_output_dir / "manifest.json"
-        try:
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(manifest_data, f, indent=2)
-            logger.info(f"Manifest file written to: {manifest_path}")
-        except Exception as e:
-            logger.error(f"Failed to write manifest.json: {e}")
-
-        final_status = (
-            "success"
-            if failed_samples_count == 0
-            else "partial_success" if successful_samples else "error"
-        )
-        logger.info(
-            f"Phonosyne pipeline finished. Status: {final_status}. {len(successful_samples)}/{num_total_samples} samples generated."
+        # The `instructions` will be refined in Step 13.
+        # `output_type` for OrchestratorAgent could be a Pydantic model summarizing the run,
+        # or simply a string (e.g., path to manifest or success/failure message).
+        # For now, let's use str, assuming it will output a final status message.
+        super().__init__(
+            name=agent_name,
+            instructions=ORCHESTRATOR_INSTRUCTIONS,  # Placeholder, to be detailed in Step 13
+            model=model,
+            tools=agent_tools,
+            output_type=str,
+            **kwargs,
         )
 
-        return {
-            "status": final_status,
-            "rendered": len(successful_samples),
-            "total_planned": num_total_samples,
-            "output_dir": str(run_output_dir),
-        }
 
-    @staticmethod
-    def _static_process_single_sample(
-        sample_stub: SampleStub,
-        design_plan_slug: str,
-        run_output_dir: Path,
-        verbose_logging: bool,
-    ) -> SampleGenerationResult:
-        """
-        Static method to process a single sample. Instantiates its own agents.
-        This is suitable for use with ProcessPoolExecutor.
-        """
-        # Re-initialize agents here as they are not picklable.
-        # This adds overhead but allows true multiprocessing if LocalPythonExecutor is CPU bound.
-        # If LLM calls are the main bottleneck, ThreadPoolExecutor with shared agents is fine.
-        # Current implementation uses ThreadPoolExecutor, so this static method is called
-        # but could also be an instance method if agents were made picklable or if we ensure
-        # that the state within agents (like OpenAI client) is handled correctly across threads.
-        # For simplicity and to match the structure for potential ProcessPool use:
-        analyzer = AnalyzerAgent()
-        compiler = CompilerAgent()
-        # No need for DesignerAgent here.
-
-        sample_id = sample_stub.id
-        # Configure logger for this process/thread if needed, or rely on root logger propagation.
-        # logger_sps = logging.getLogger(f"{__name__}.sample_worker.{sample_id}") # Example specific logger
-        # logger_sps.info(f"Starting processing.") # Use this logger_sps instead of global logger
-
-        # Using global logger for now, assuming it's thread-safe or configured for multiprocessing.
-        logger.info(f"[SampleProc: {sample_id}] Starting processing.")
-
-        try:
-            logger.debug(f"[SampleProc: {sample_id}] Running AnalyzerAgent...")
-            analyzer_input_data = AnalyzerInput(
-                id=sample_id,
-                seed_description=sample_stub.seed_description,
-                duration_s=sample_stub.duration_s,
-            )
-            synthesis_recipe: CompilerInput = analyzer.process(
-                analyzer_input_data.model_dump()
-            )
-            logger.info(
-                f"[SampleProc: {sample_id}] AnalyzerAgent completed. Effect: {synthesis_recipe.effect_name}"
-            )
-
-            final_sample_filename = (
-                f"{sample_id}_{slugify(synthesis_recipe.effect_name)}.wav"
-            )
-            logger.debug(
-                f"[SampleProc: {sample_id}] Running CompilerAgent for '{synthesis_recipe.effect_name}'..."
-            )
-
-            validator_partial = lambda path: validate_wav(path, synthesis_recipe)
-
-            temp_wav_path: Path = compiler.run(
-                inputs=synthesis_recipe, validator_fn=validator_partial
-            )
-            logger.info(
-                f"[SampleProc: {sample_id}] CompilerAgent completed. Temp WAV: {temp_wav_path}"
-            )
-
-            final_wav_path = run_output_dir / final_sample_filename
-            try:
-                # Ensure parent directory of final_wav_path exists, though run_output_dir should already.
-                final_wav_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(temp_wav_path), final_wav_path)
-                logger.info(f"[SampleProc: {sample_id}] Moved WAV to: {final_wav_path}")
-            except Exception as e_move:
-                logger.error(
-                    f"[SampleProc: {sample_id}] Failed to move WAV from {temp_wav_path} to {final_wav_path}: {e_move}"
-                )
-                if temp_wav_path.exists():
-                    temp_wav_path.unlink(missing_ok=True)  # cleanup temp if move failed
-                return SampleGenerationResult(
-                    sample_id=sample_id,
-                    status="failed_file_operation",
-                    error_message=f"Move failed: {e_move}",
-                )
-
-            # Defensive cleanup of source temp file if shutil.move didn't remove it (it should)
-            if temp_wav_path.exists():
-                temp_wav_path.unlink(missing_ok=True)
-
-            return SampleGenerationResult(
-                sample_id=sample_id, status="success", output_path=final_wav_path
-            )
-
-        except ValidationFailedError as e_val:
-            logger.error(f"[SampleProc: {sample_id}] Validation failed: {e_val}")
-            return SampleGenerationResult(
-                sample_id=sample_id,
-                status="failed_validation",
-                error_message=str(e_val),
-            )
-        except Exception as e:
-            logger.error(
-                f"[SampleProc: {sample_id}] Processing failed: {type(e).__name__}: {e}",
-                exc_info=verbose_logging,
-            )
-            status = (
-                "failed_analysis"
-                if "synthesis_recipe" not in locals()
-                else "failed_compilation"
-            )
-            return SampleGenerationResult(
-                sample_id=sample_id, status=status, error_message=str(e)
-            )
-
-
-if __name__ == "__main__":
-    # Basic configuration for standalone testing
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-
-    if not settings.OPENROUTER_API_KEY:
-        print("Skipping Manager test: OPENROUTER_API_KEY not set in .env")
-    else:
-        print("Testing Manager (will make real LLM calls and execute code)...")
-        # Test with a small number of workers for this example
-        manager = Manager(num_workers=2, verbose=True)
-
-        test_brief = "A short set of three glitchy, robotic sound effects for a UI."
-        # To make this test faster, we might want to mock the DesignerAgent
-        # to return a plan with only 1-2 samples.
-        # For now, it will try to generate the full 18 if the LLM complies.
-
-        # Monkeypatch DesignerAgent for a quicker test if needed:
-        # class MockDesignerAgent(DesignerAgent):
-        #     def process(self, raw_inputs: Dict[str, Any], **kwargs: Any) -> DesignPlanSchema:
-        #         logger.info("Using MOCKED DesignerAgent process method.")
-        #         return DesignPlanSchema(
-        #             brief_slug="mocked-glitchy-ui",
-        #             movements=[
-        #                 MovementStub(id="movement_1", name="Mock Movement", samples=[
-        #                     SampleStub(id="S1.1", seed_description="A short clicky glitch", duration_s=0.5),
-        #                     SampleStub(id="S1.2", seed_description="A robotic whir", duration_s=1.0),
-        #                 ])
-        #             ]
-        #         )
-        # manager.designer_agent = MockDesignerAgent()
-        # logger.info("Patched manager.designer_agent with MockDesignerAgent for test.")
-
-        try:
-            result_summary = manager.run(user_brief=test_brief)
-            print("\nManager Run Summary:")
-            print(
-                json.dumps(result_summary, indent=2, default=str)
-            )  # Use default=str for Path objects
-
-            print(f"\nCheck the output directory: {result_summary.get('output_dir')}")
-            if result_summary.get("status") != "success":
-                print(
-                    "Pipeline did not complete successfully for all samples. Check logs and manifest.json."
-                )
-
-        except Exception as e:
-            print(
-                f"\nAn critical error occurred during Manager test: {e}", exc_info=True
-            )
-
-# Need to import BaseModel for SampleGenerationResult
-# from pydantic import BaseModel # Commented out / removed from bottom
+# The old Manager class and its methods like _process_single_sample, run,
+# and _static_process_single_sample are now superseded by the OrchestratorAgent's
+# instruction-driven workflow using the agents SDK.
+# The main application entry point (phonosyne.run_prompt) will instantiate and
+# run this OrchestratorAgent.

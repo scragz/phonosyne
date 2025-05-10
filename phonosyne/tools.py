@@ -1,0 +1,157 @@
+"""
+- @description
+- This module defines FunctionTools for the Phonosyne application,
+- utilizing the `agents` SDK. These tools encapsulate specific,
+- reusable functionalities that can be invoked by agents within the system.
+-
+- Key features:
+- - Wrappers for existing utility functions (e.g., code execution, audio validation).
+- - New utility functions for file operations (e.g., moving files, generating manifests).
+- - Adherence to the `agents.function_tool` decorator for integration with the SDK.
+-
+- @dependencies
+- - `agents` SDK (specifically `agents.function_tool`)
+- - `phonosyne.agents.schemas` for Pydantic models.
+- - Standard Python libraries (e.g., `json`, `pathlib`, `shutil`).
+-
+- @notes
+- - Each tool is an asynchronous function.
+- - Docstrings of tool functions serve as their descriptions for the calling agents.
+"""
+
+import json
+import shutil
+from pathlib import Path
+
+from agents import function_tool
+
+# Import Pydantic models from existing schemas
+from phonosyne.agents.schemas import (  # Add other schemas as they become necessary for tool inputs/outputs
+    AnalyzerOutput,
+    DesignerOutput,
+    SampleStub,
+)
+
+# Import specific utilities needed for the tools
+from phonosyne.utils.exec_env import CodeExecutionError
+from phonosyne.utils.exec_env import run_code as existing_run_code
+
+
+@function_tool
+async def execute_python_dsp_code(code: str, output_filename: str) -> str:
+    """
+    Executes the provided Python DSP code safely and saves the output as a temporary .wav file.
+    The DSP code must return a tuple: (numpy_array, sample_rate).
+
+    Args:
+        code: The Python DSP code string to execute.
+        output_filename: Desired unique name for the output .wav file (e.g., "effect_attempt_1.wav").
+
+    Returns:
+        Path to the generated temporary .wav file if successful, or an error message string.
+    """
+    try:
+        # existing_run_code is synchronous. The openai-agents SDK's @function_tool
+        # should handle running synchronous functions in a thread pool if called from an async agent.
+        # If direct async execution of run_code is required, run_code itself would need to be async
+        # or wrapped with asyncio.to_thread. For now, assuming SDK handles it.
+        wav_path: Path = existing_run_code(
+            code=code, output_filename=output_filename, mode="local_executor"
+        )
+        return str(wav_path)
+    except CodeExecutionError as e:
+        return f"CodeExecutionError: {str(e)}"
+    except Exception as e:
+        return f"Unexpected error during code execution: {str(e)}"
+
+
+# Import specific utilities needed for the AudioValidationTool
+from phonosyne.dsp.validators import (
+    ValidationFailedError,
+)
+from phonosyne.dsp.validators import validate_wav as existing_validate_wav
+
+
+@function_tool
+async def validate_audio_file(file_path: str, spec_json: str) -> str:
+    """
+    Validates a generated .wav file against technical specifications.
+
+    Args:
+        file_path: Path to the temporary .wav file to validate.
+        spec_json: A JSON string of the AnalyzerOutput schema containing target specifications
+                   (like duration, effect_name). Sample rate is currently assumed from settings.
+
+    Returns:
+        "Validation successful" if all checks pass, otherwise a string detailing validation errors.
+    """
+    try:
+        spec_dict = json.loads(spec_json)
+        # AnalyzerOutput is already imported at the top of the file
+        analyzer_spec = AnalyzerOutput(**spec_dict)
+
+        # existing_validate_wav is synchronous. Assuming openai-agents SDK handles this.
+        existing_validate_wav(file_path=Path(file_path), spec=analyzer_spec)
+        return "Validation successful"
+    except ValidationFailedError as e:
+        return f"ValidationFailedError: {str(e)}"
+    except json.JSONDecodeError as e:
+        return f"JSONDecodeError for spec_json: {str(e)}"
+    except Exception as e:
+        return f"Unexpected error during audio validation: {str(e)}"
+
+
+@function_tool
+async def move_file(source_path: str, target_path: str) -> str:
+    """
+    Moves a file from a source path to a target path.
+    Creates the target directory if it doesn't exist.
+
+    Args:
+        source_path: The path of the file to move.
+        target_path: The destination path for the file.
+
+    Returns:
+        A success message with the target path, or an error message string.
+    """
+    try:
+        source = Path(source_path)
+        target = Path(target_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(target))
+        return f"File moved successfully to {str(target)}"
+    except Exception as e:
+        return f"Error moving file from {source_path} to {target_path}: {str(e)}"
+
+
+@function_tool
+async def generate_manifest_file(manifest_data_json: str, output_directory: str) -> str:
+    """
+    Creates the manifest.json file in the specified output directory
+    based on the provided JSON data string.
+
+    Args:
+        manifest_data_json: A JSON string containing the aggregated data for the manifest.
+        output_directory: The directory where manifest.json will be saved.
+
+    Returns:
+        A success message with the path to the manifest, or an error message string.
+    """
+    try:
+        output_dir_path = Path(output_directory)
+        output_dir_path.mkdir(parents=True, exist_ok=True)
+        manifest_file_path = output_dir_path / "manifest.json"
+
+        # Parse the JSON string to ensure it's valid before writing
+        parsed_data = json.loads(manifest_data_json)
+
+        with open(manifest_file_path, "w", encoding="utf-8") as f:
+            json.dump(parsed_data, f, indent=2)  # Write the parsed data, pretty-printed
+        return f"Manifest generated successfully at {str(manifest_file_path)}"
+    except json.JSONDecodeError as e:
+        return f"Error decoding manifest_data_json: {str(e)}"
+    except Exception as e:
+        return f"Error generating manifest file at {output_directory}/manifest.json: {str(e)}"
+
+
+# Further tool implementations will follow in subsequent steps.

@@ -20,8 +20,7 @@ Key features:
 # TODO: Import and export AnalyzerAgent from .analyzer (Step 3.3)
 from .analyzer import AnalyzerAgent
 
-# TODO: Import and export AgentBase from .base (Step 3.1)
-from .base import AgentBase
+# AgentBase from .base is removed as it's deprecated (Step 11)
 
 # TODO: Import and export CompilerAgent from .compiler (Step 3.4)
 from .compiler import CompilerAgent
@@ -38,7 +37,6 @@ from .schemas import (
 )
 
 __all__ = [
-    "AgentBase",
     "DesignerAgent",
     "DesignerAgentInput",
     "AnalyzerAgent",

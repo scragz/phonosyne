@@ -15,41 +15,53 @@ Key features:
 - The `run_prompt` function will be implemented and imported here in a later step (Step 5.2).
 """
 
-# TODO: Implement and import run_prompt in Step 5.2
+import asyncio  # Required for running async code from sync CLI if needed, or for general async ops
 from typing import Any, Dict, Optional
 
-from .orchestrator import Manager  # Import the Manager class
+from agents import (
+    Runner,  # type: ignore # Assuming agents SDK might not be in static analysis path yet
+)
+
+# Import the new OrchestratorAgent and the agents SDK Runner
+from .orchestrator import OrchestratorAgent
 
 
-def run_prompt(
+async def run_prompt(
     prompt: str,
-    num_workers: Optional[int] = None,
-    verbose: bool = False,
-    **kwargs: Any,  # To catch any other potential future manager args
-) -> Dict[str, Any]:
+    # num_workers and verbose are not directly used by OrchestratorAgent or Runner in this setup.
+    # Concurrency and verbosity might be configured differently with the agents SDK,
+    # e.g., via Runner run_config or agent's internal logging.
+    # For now, these parameters are removed from run_prompt signature for simplicity,
+    # unless specific SDK mechanisms for them are identified.
+    **kwargs: Any,  # To catch any other potential future args
+) -> Any:  # Return type depends on Runner.run and OrchestratorAgent's output_type (str)
     """
-    Main SDK entry point to run the Phonosyne generation pipeline.
+    Main SDK entry point to run the Phonosyne generation pipeline using OrchestratorAgent.
 
     Args:
         prompt: The user's natural-language sound design brief.
-        num_workers: Optional number of parallel workers to use.
-                     If None, uses default from settings or CPU count.
-                     0 means serial execution.
-        verbose: If True, enables more detailed logging.
         **kwargs: Additional keyword arguments for future flexibility.
 
     Returns:
-        A dictionary summarizing the outcome of the generation process,
-        as returned by Manager.run().
+        The result from agents.Runner.run(), which is the OrchestratorAgent's final output.
     """
-    manager = Manager(num_workers=num_workers, verbose=verbose)
-    return manager.run(user_brief=prompt)
+    orchestrator_agent = OrchestratorAgent(
+        **kwargs
+    )  # Pass kwargs if OrchestratorAgent accepts them
+
+    # The agents.Runner.run() is an async function.
+    # The input to the orchestrator is the user's prompt.
+    result = await Runner.run(agent=orchestrator_agent, input=prompt)
+
+    # The result.final_output will contain what the OrchestratorAgent ultimately returns.
+    # Based on OrchestratorAgent's output_type=str, this should be a string.
+    return result.final_output
 
 
 __version__ = "0.1.0"
 
 __all__ = [
     "run_prompt",
-    "Manager",  # Optionally export Manager if direct use is desired
+    "OrchestratorAgent",  # Exporting the agent itself might be useful
     "__version__",
 ]
