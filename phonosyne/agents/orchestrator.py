@@ -33,13 +33,7 @@ from pathlib import Path
 from typing import Any, List
 
 # Import the new Agent class from the SDK
-from agents import (
-    Agent,  # type: ignore # Assuming agents SDK might not be in static analysis path yet
-)
-from agents import FunctionTool  # For type hinting if needed, tools are passed directly
-from agents import (
-    ModelProvider,  # We might not need this directly if we import the instance
-)
+from agents import Agent, ModelSettings
 
 from phonosyne import settings
 from phonosyne.agents.analyzer import AnalyzerAgent
@@ -144,14 +138,12 @@ class OrchestratorAgent(Agent):
             model=model,
             tools=agent_tools,
             output_type=str,
-            temperature=0.4,  # Recommended 0.3 to 0.5
-            top_p=0.9,
-            top_k=0,
-            frequency_penalty=0.1,  # Recommended 0.0 to 0.2
-            presence_penalty=0.15,  # Recommended 0.0 to 0.3
-            repetition_penalty=1.0,
-            min_p=0.0,
-            top_a=0.0,
+            model_settings=ModelSettings(
+                temperature=0.4,  # Recommended 0.3 to 0.5
+                top_p=0.9,
+                frequency_penalty=0.1,  # Recommended 0.0 to 0.2
+                presence_penalty=0.15,  # Recommended 0.0 to 0.3
+            ),
             **kwargs,
         )
 

@@ -22,7 +22,7 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
 {
   "effect_name": "[ID]_[a_concise_snake_case_slug_derived_from_the_input]",
   "duration": 20.0, // This MUST be a float and EXACTLY match the `duration_s` from your input.
-  "description": "Detailed natural-language instructions (approximately 200-1000 words) for synthesizing the sound. Explain layers, waveforms, envelopes, filters, effects, modulation, panning (if conceptual before mono sum), and mixing levels in clear, unambiguous, technical prose. For example: 'Layer 1: Begin with a sawtooth wave at 80Hz. Apply a filter envelope with a 500ms attack to a low-pass filter, sweeping its cutoff from 200Hz to 1.5kHz...'"
+  "description": "Detailed natural-language instructions (approximately 200-1000 words) for synthesizing the sound. Explain layers, waveforms, envelopes, filters, effects, modulation, and mixing levels in clear, unambiguous, technical prose. For example: 'Layer 1: Begin with a sawtooth wave at 80Hz. Apply a filter envelope with a 500ms attack to a low-pass filter, sweeping its cutoff from 200Hz to 1.5kHz...'"
 }
 ```
 
@@ -43,7 +43,7 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
      - **Pitch & Frequency**: Provide approximate frequencies, musical notes (e.g., "C3," "A440"), or pitch ranges (e.g., "sweeping from a low rumble around 50Hz up to 500Hz").
      - **Envelopes**: Describe amplitude envelopes (e.g., "slow attack of approximately 2 seconds," "sharp percussive decay of 100ms," "ADSR with long release") and any filter or pitch envelopes.
      - **Filters**: Specify filter types (e.g., "resonant low-pass filter," "band-pass filter," "formant filter"), key parameters (e.g., "cutoff frequency at 800Hz," "Q factor of 2.5"), and any modulation (e.g., "cutoff swept by an LFO," "filter cutoff controlled by an envelope").
-     - **Effects**: Detail any audio effects in the chain and their important settings (e.g., "subtle stereo chorus with a rate of 0.5Hz," "ping-pong delay with 300ms delay time and 40% feedback," "large hall reverb with a 3-second decay").
+     - **Effects**: Detail any audio effects in the chain and their important settings (e.g., "subtle stereo chorus with a rate of 0.5Hz," "ping-pong delay with 300ms delay time and 40% feedback," "large hall reverb with a 3-second decay"). USE LOTS OF EFFECTS!
      - **Modulation**: Describe modulation sources (e.g., "LFO," "random modulator," "envelope follower") and their targets and approximate intensity (e.g., "LFO subtly modulating oscillator pitch," "noise source modulating filter cutoff slightly").
      - **Panning**: Although the final output will be mono, if stereo imaging concepts are integral to the sound's design before a final mono sum (e.g., "sound starts panned left and moves to the right"), describe this.
      - **Mixing**: If multiple layers are present, give an indication of their relative levels or prominence.

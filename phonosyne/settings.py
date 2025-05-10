@@ -28,10 +28,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # LLM Model Configuration
-MODEL_DEFAULT: str = os.getenv("MODEL_DEFAULT", "google/gemini-2.5-flash-preview")
+MODEL_DEFAULT: str = os.getenv("MODEL_DEFAULT", "openai/gpt-4.1")
+MODEL_ORCHESTRATOR: str = os.getenv("MODEL_ORCHESTRATOR", MODEL_DEFAULT)
 MODEL_DESIGNER: str = os.getenv("MODEL_DESIGNER", MODEL_DEFAULT)
 MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", MODEL_DEFAULT)
-MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", "google/gemini-2.5-pro-preview")
+MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", "openai/o4-mini")
 
 # Audio Processing Settings
 DEFAULT_SR: int = 48_000  # Default sample rate in Hz

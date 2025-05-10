@@ -30,12 +30,7 @@ from pathlib import Path
 from typing import Any
 
 # Import the new Agent class from the SDK
-from agents import (
-    Agent,  # type: ignore # Assuming agents SDK might not be in static analysis path yet
-)
-from agents import (
-    ModelProvider,  # This might not be needed if Agent takes Model instance
-)
+from agents import Agent, ModelSettings
 from pydantic import BaseModel, Field  # Retaining for DesignerAgentInput
 
 from phonosyne import settings
@@ -109,14 +104,12 @@ class DesignerAgent(Agent):
             model=model_arg,  # Pass the model name or Model instance
             # output_type=DesignerOutput, # Temporarily removed to rely on prompt for JSON structure
             tools=[],  # DesignerAgent itself does not use tools
-            temperature=0.7,  # Recommended 0.6 to 0.8
-            top_p=0.95,
-            top_k=0,
-            frequency_penalty=0.35,  # Recommended 0.2 to 0.5
-            presence_penalty=0.35,  # Recommended 0.2 to 0.5
-            repetition_penalty=1.0,
-            min_p=0.0,
-            top_a=0.0,
+            model_settings=ModelSettings(
+                temperature=0.7,  # Recommended 0.6 to 0.8
+                top_p=0.95,
+                frequency_penalty=0.35,  # Recommended 0.2 to 0.5
+                presence_penalty=0.35,  # Recommended 0.2 to 0.5
+            ),
             **kwargs,  # Pass through any other agent parameters
         )
 

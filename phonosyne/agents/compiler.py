@@ -37,10 +37,8 @@ from typing import Any
 
 # Import the new Agent class from the SDK
 from agents import (
-    Agent,  # type: ignore # Assuming agents SDK might not be in static analysis path yet
-)
-from agents import (
-    ModelProvider,  # This might not be needed if Agent takes Model instance
+    Agent,
+    ModelSettings,
 )
 
 from phonosyne import settings
@@ -103,14 +101,12 @@ class CompilerAgent(Agent):
             model=model_arg,  # Pass the model name or Model instance
             tools=agent_tools,
             output_type=str,  # Expects a string (file path) as the final output
-            temperature=0.3,  # Recommended 0.2 to 0.4
-            top_p=0.9,
-            top_k=0,
-            frequency_penalty=0.0,
-            presence_penalty=0.0,
-            repetition_penalty=1.0,
-            min_p=0.0,
-            top_a=0.0,
+            model_settings=ModelSettings(
+                temperature=0.3,  # Recommended 0.2 to 0.4
+                top_p=0.9,
+                frequency_penalty=0.0,
+                presence_penalty=0.0,
+            ),
             **kwargs,
         )
 
