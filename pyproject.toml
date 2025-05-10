@@ -26,6 +26,7 @@ dependencies = [
   "tqdm",
   "pydantic",
   "python-dotenv",
+  "tenacity",
 ]
 
 [project.optional-dependencies]

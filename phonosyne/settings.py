@@ -23,14 +23,14 @@ Key features:
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # LLM Model Configuration
-MODEL_DESIGNER: str = os.getenv(
-    "MODEL_DESIGNER", "openrouter/anthropic/claude-3-haiku-20240307"
-)
-MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", "openrouter/google/gemini-flash-1.5")
-MODEL_COMPILER: str = os.getenv(
-    "MODEL_COMPILER", "openrouter/anthropic/claude-3-haiku-20240307"
-)  # Using Haiku for cost/speed
+MODEL_DESIGNER: str = os.getenv("MODEL_DESIGNER", "google/gemini-2.5-pro-preview-03-25")
+MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", "google/gemini-2.5-pro-preview-03-25")
+MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", "google/gemini-2.5-pro-preview-03-25")
 
 # Audio Processing Settings
 DEFAULT_SR: int = 48_000  # Default sample rate in Hz

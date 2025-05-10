@@ -13,10 +13,6 @@ The project aims to provide both a command-line tool (`phonosyne`) and a Python 
 - **Concurrency**: Supports parallel processing of samples to speed up generation.
 - **Extensible**: Designed with a modular architecture for future enhancements.
 
-## Getting Started
-
-(TODO: Add installation and basic usage instructions here once the project is more mature.)
-
 ## Project Status
 
 This project is currently under active development (Alpha).

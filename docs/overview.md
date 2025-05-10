@@ -6,14 +6,14 @@ Phonosyne is an AI-powered system designed to generate collections of audio samp
 
 The system is built around a central `Manager` (in `phonosyne.orchestrator`) that coordinates a sequence of agents and processes. The primary components are:
 
-1.  **Input**: A user-provided text prompt describing the desired sound collection.
-2.  **Agent Pipeline**:
-    - **DesignerAgent**: Expands the brief into a structured plan.
-    - **AnalyzerAgent**: Enriches individual sample descriptions from the plan into detailed synthesis recipes.
-    - **CompilerAgent**: Generates Python DSP code from the synthesis recipes, executes it, and iteratively refines it.
-3.  **Code Execution**: LLM-generated Python code is run using `smolagents.LocalPythonExecutor` for safer local execution.
-4.  **Validation**: Generated audio files are validated against technical specifications.
-5.  **Output**: A directory containing the generated `.wav` files and a `manifest.json` summarizing the collection.
+1. **Input**: A user-provided text prompt describing the desired sound collection.
+2. **Agent Pipeline**:
+   - **DesignerAgent**: Expands the brief into a structured plan.
+   - **AnalyzerAgent**: Enriches individual sample descriptions from the plan into detailed synthesis recipes.
+   - **CompilerAgent**: Generates Python DSP code from the synthesis recipes, executes it, and iteratively refines it.
+3. **Code Execution**: LLM-generated Python code is run using `smolagents.LocalPythonExecutor` for safer local execution.
+4. **Validation**: Generated audio files are validated against technical specifications.
+5. **Output**: A directory containing the generated `.wav` files and a `manifest.json` summarizing the collection.
 
 ## Detailed Workflow and Data Flow
 
@@ -63,29 +63,29 @@ The `Manager` iterates through each `SampleStub` in the `DesignerOutput` plan. F
 
 - **Input**: The `AnalyzerOutput` model (synthesis recipe) from the AnalyzerAgent.
 - **Process (Iterative Loop within CompilerAgent)**:
-  1.  **Code Generation**:
-      - `CompilerAgent` uses its system prompt (`prompts/compiler.md`) and `MODEL_COMPILER`.
-      - The prompt instructs the LLM to generate Python DSP code based on the `AnalyzerOutput.description`.
-      - Crucially, the generated code **must return a tuple `(audio_data_numpy_array, sample_rate_int)`**. It does _not_ write a file itself.
-      - The agent extracts the Python code from the LLM's Markdown response.
-  2.  **Code Execution (`phonosyne.utils.exec_env.run_code`)**:
-      - The extracted Python code string is passed to `run_code` using the `"local_executor"` mode.
-      - `LocalPythonExecutor` (from `smolagents`) executes the code. It has a list of authorized imports (`numpy`, `scipy`, `math`, `random`, etc.) and an operation limit for safety.
-      - If execution is successful, `LocalPythonExecutor` returns the `(audio_data, sample_rate)` tuple.
-      - `run_code` then takes this tuple and saves the `audio_data` to a temporary `.wav` file using `soundfile.write()`. The path to this temporary WAV is returned by `run_code`.
-  3.  **Validation (via `phonosyne.dsp.validators.validate_wav`)**:
-      - The `CompilerAgent` calls `validate_wav` (passed as `validator_fn`) with the path to the temporary WAV file and the `AnalyzerOutput` (which contains the target specifications like duration and sample rate).
-      - `validate_wav` checks:
-        - Sample rate.
-        - Duration (within tolerance defined in `settings.DURATION_TOLERANCE_S`).
-        - Bit depth (32-bit float).
-        - Channels (mono).
-        - Peak audio level (must be `≤ settings.TARGET_PEAK_DBFS`).
-      - If validation passes, the loop for this sample ends, and the path to the (still temporary) WAV is considered final for this stage.
-  4.  **Repair (If Execution or Validation Fails)**:
-      - If code execution raises an error (e.g., `InterpreterError` from `LocalPythonExecutor`, or an error during `soundfile.write`), or if `validate_wav` raises `ValidationFailedError`, the `CompilerAgent` captures the error.
-      - The error message is formatted and provided back to the LLM in the next iteration of the code generation prompt, asking it to fix the issue.
-      - This loop continues for a maximum of `settings.MAX_COMPILER_ITERATIONS`.
+  1. **Code Generation**:
+     - `CompilerAgent` uses its system prompt (`prompts/compiler.md`) and `MODEL_COMPILER`.
+     - The prompt instructs the LLM to generate Python DSP code based on the `AnalyzerOutput.description`.
+     - Crucially, the generated code **must return a tuple `(audio_data_numpy_array, sample_rate_int)`**. It does _not_ write a file itself.
+     - The agent extracts the Python code from the LLM's Markdown response.
+  2. **Code Execution (`phonosyne.utils.exec_env.run_code`)**:
+     - The extracted Python code string is passed to `run_code` using the `"local_executor"` mode.
+     - `LocalPythonExecutor` (from `smolagents`) executes the code. It has a list of authorized imports (`numpy`, `scipy`, `math`, `random`, etc.) and an operation limit for safety.
+     - If execution is successful, `LocalPythonExecutor` returns the `(audio_data, sample_rate)` tuple.
+     - `run_code` then takes this tuple and saves the `audio_data` to a temporary `.wav` file using `soundfile.write()`. The path to this temporary WAV is returned by `run_code`.
+  3. **Validation (via `phonosyne.dsp.validators.validate_wav`)**:
+     - The `CompilerAgent` calls `validate_wav` (passed as `validator_fn`) with the path to the temporary WAV file and the `AnalyzerOutput` (which contains the target specifications like duration and sample rate).
+     - `validate_wav` checks:
+       - Sample rate.
+       - Duration (within tolerance defined in `settings.DURATION_TOLERANCE_S`).
+       - Bit depth (32-bit float).
+       - Channels (mono).
+       - Peak audio level (must be `≤ settings.TARGET_PEAK_DBFS`).
+     - If validation passes, the loop for this sample ends, and the path to the (still temporary) WAV is considered final for this stage.
+  4. **Repair (If Execution or Validation Fails)**:
+     - If code execution raises an error (e.g., `InterpreterError` from `LocalPythonExecutor`, or an error during `soundfile.write`), or if `validate_wav` raises `ValidationFailedError`, the `CompilerAgent` captures the error.
+     - The error message is formatted and provided back to the LLM in the next iteration of the code generation prompt, asking it to fix the issue.
+     - This loop continues for a maximum of `settings.MAX_COMPILER_ITERATIONS`.
 - **Output (from CompilerAgent.run)**: A `pathlib.Path` object pointing to the validated `.wav` file (still in a persistent temporary location managed by `exec_env.run_code`).
 - **Data Flow**: `AnalyzerOutput -> CompilerAgent -> (LLM for code) -> str (Python code) -> exec_env.run_code (with LocalPythonExecutor) -> (np.array, int) -> soundfile.write -> Path (temp WAV) -> validate_wav -> Path (final temp validated WAV)`
 

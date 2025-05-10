@@ -104,9 +104,7 @@ class AgentBase(abc.ABC, Generic[InputSchema, OutputSchema]):
         """Loads a prompt template from the filesystem."""
         template_path = settings.PROMPTS_DIR / template_name
         try:
-            with open(
-                template_path, "r", encoding="utf-f"
-            ) as f:  # Corrected typo utf-8
+            with open(template_path, "r", encoding="utf-8") as f:
                 return f.read()
         except FileNotFoundError:
             logger.error(f"Prompt template not found: {template_path}")

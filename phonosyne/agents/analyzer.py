@@ -31,6 +31,9 @@ Key features:
 import logging
 from typing import Any
 
+from openai import APIError  # Assuming this is the intended APIError
+from pydantic import ValidationError
+
 from phonosyne import settings
 from phonosyne.agents.base import AgentBase
 from phonosyne.agents.schemas import AnalyzerInput, AnalyzerOutput
