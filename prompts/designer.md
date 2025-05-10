@@ -8,18 +8,20 @@ You MUST output a single-line UTF-8 JSON object string and NOTHING ELSE. Do not 
 
 **JSON Output Structure:**
 
+Your output MUST be a single-line JSON object string. Each of the 18 samples within the `samples` array MUST be a complete JSON object adhering to the `SampleStub` schema as shown below.
+
 ```json
 {
   "theme": "a_brief_snake_case_slug_derived_from_the_user_brief",
   "samples": [
-    // Exactly 18 sample objects must follow.
-    // Example for one sample (repeat structure for all 18):
+    // Exactly 18 sample objects MUST follow. Each object MUST have "id", "duration_s", and "seed_description" fields.
+    // Example for ONE sample object (this exact structure must be repeated 18 times with different values):
     {
-      "id": "L1.1", // See ID pattern rules below.
-      "duration_s": 24.0, // See duration rules below.
-      "seed_description": "Concise (<= 60 words), vivid, and technically descriptive text for this sound (e.g., waveforms, modulations, filter sweeps). Do not use the words 'lubadh' or 'arbhar' in this description unless it is a core conceptual element requested by the user brief."
+      "id": "L1.1", // String. See ID pattern rules below.
+      "duration_s": 24.0, // Float. See duration rules below.
+      "seed_description": "String. Concise (<= 60 words), vivid, and technically descriptive text for this sound (e.g., waveforms, modulations, filter sweeps). Do not use the words 'lubadh' or 'arbhar' in this description unless it is a core conceptual element requested by the user brief."
     }
-    // ... other 17 samples
+    // ... other 17 sample objects, each a complete JSON object like the example above ...
   ]
 }
 ```
@@ -28,16 +30,18 @@ You MUST output a single-line UTF-8 JSON object string and NOTHING ELSE. Do not 
 
 1. **`theme` Field**:
 
-   - This field should contain a short, descriptive, `snake_case_slug` that you derive from the input user brief.
+   - This field should contain a short, descriptive, `snake_case_slug` (string) that you derive from the input user brief.
 
-2. **`samples` Array Structure (Exactly 18 Samples)**:
+2. **`samples` Array Structure (Exactly 18 Sample Objects)**:
 
+   - The `samples` array MUST contain exactly 18 elements.
+   - Each element in the `samples` array MUST be a JSON object structured like the example above (i.e., a `SampleStub`).
    - The plan must detail exactly **6 distinct movements**.
-   - Each movement must consist of exactly **3 samples**, following this pattern:
+   - Each movement must consist of exactly **3 samples** (each being a `SampleStub` object), following this pattern:
      - The first sample is notionally for a "Lubadh" style generation.
      - The second sample is also notionally for a "Lubadh" style generation.
      - The third sample is notionally for an "Arbhar" style generation.
-   - This structure results in a total of precisely **18 `sample` objects** in the `samples` array.
+   - This structure results in a total of precisely **18 `SampleStub` JSON objects** in the `samples` array.
 
 3. **Sample `id` Field (Unique Identifier Pattern)**:
 
