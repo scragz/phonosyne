@@ -10,22 +10,23 @@ A JSON object matching the schema defined by **analyzer** (see below).
 {
   "effect_name": "...",
   "duration": ...,
-  "sample_rate": ...,
   "description": "Natural-language synthesis recipe (see Analyzer spec)"
 }
 ```
 
 ## Required Output Format
 
-Return **only** a Markdown fenced code-block containing the complete Python 3 script.
+Return **only** a code-block containing the complete Python 3 script.
 
 ```python
 # phonosyne-generated code
+import numpy as np
+# etc
 ```
 
-No explanatory text, no additional code blocks.
+Generate the python code and nothing else. Do NOT add markdown fences or any other formatting. Do NOT add any extra text, comments, or explanations. Do NOT include any code blocks. Do NOT include any newlines. Do NOT include any whitespace outside the JSON object.
 
-The orchestrator will pipe this script to python - and capture errors.
+The orchestrator will pipe this script to python and capture errors.
 
 ## Code Requirements
 

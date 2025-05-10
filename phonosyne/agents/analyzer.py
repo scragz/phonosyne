@@ -177,9 +177,6 @@ if __name__ == "__main__":
                 analysis_result.duration == test_analyzer_input.duration_s
             ), "Duration should match input."
             assert (
-                analysis_result.sample_rate == settings.DEFAULT_SR
-            ), "Sample rate should be default."
-            assert (
                 len(analysis_result.description) >= 10
             ), "Description should be reasonably long."  # Relaxed from 40 for test
             print("\nAnalyzerAgent test successful (basic structure checks passed).")

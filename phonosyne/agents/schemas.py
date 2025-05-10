@@ -7,7 +7,6 @@ the information passed between different agents in the Phonosyne pipeline.
 Key features:
 - `SampleStub`: Defines the structure for a single sample's initial description
                  as output by the DesignerAgent and input to the AnalyzerAgent.
-- `MovementStub`: Defines a collection of samples within a single movement.
 - `DesignerOutput`: Defines the overall output structure of the DesignerAgent.
 - `AnalyzerInput`: Defines the input structure for the AnalyzerAgent (derived from SampleStub).
 - `AnalyzerOutput`: Defines the structured output of the AnalyzerAgent, which serves
@@ -55,36 +54,7 @@ class SampleStub(BaseModel):
     @field_validator("id")
     @classmethod
     def id_format(cls, v: str) -> str:
-        # Basic validation for ID format, can be expanded
-        if (
-            not (v.startswith("L") or v.startswith("A"))
-            or "." not in v
-            and v.startswith("L")
-        ):
-            if len(v.split(".")) == 2 and v.startswith("L"):  # L1.1
-                pass
-            elif not v[1:].isdigit() and v.startswith("A"):  # A1
-                pass
-            # Allow more generic IDs if not strictly L{n}.{1|2} or A{n} for flexibility
-            # raise ValueError('Sample ID must be in format Lm.n or An (e.g., L1.1, A1)')
         return v
-
-
-class MovementStub(BaseModel):
-    """
-    Represents a single movement within the sound collection plan, containing multiple samples.
-    """
-
-    # movement_number: int = Field(..., alias="movement", gt=0, description="Movement number (1-6).") # As per designer.md
-    id: str = Field(
-        ..., description="Identifier for the movement (e.g., 'movement_1')."
-    )
-    name: str = Field(..., description="Name of the movement.")
-    samples: List[SampleStub] = Field(
-        ...,
-        min_length=1,  # Each movement must have at least one sample
-        description="List of samples within this movement.",
-    )
 
 
 class DesignerOutput(BaseModel):
@@ -93,13 +63,11 @@ class DesignerOutput(BaseModel):
     This is the main plan for generating the sound collection.
     """
 
-    brief_slug: str = Field(
-        ..., description="Slugified version of the original user brief."
-    )
-    movements: List[MovementStub] = Field(
+    theme: str = Field(..., description="Brief description of the original user brief.")
+    samples: List[SampleStub] = Field(
         ...,
-        min_length=1,  # Must have at least one movement
-        description="List of movements in the sound collection.",
+        min_length=1,  # Each piece must have at least one sample
+        description="List of samples within this piece.",
     )
 
 
@@ -132,10 +100,6 @@ class AnalyzerOutput(BaseModel):
         ...,
         gt=0,
         description="Duration of the sound effect in seconds (must be >= 0.1 as per analyzer.md).",
-    )
-    sample_rate: int = Field(
-        default=settings.DEFAULT_SR,
-        description="Sample rate in Hz (default from settings unless specified).",
     )
     description: str = Field(
         ...,
@@ -179,28 +143,11 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error creating SampleStub: {e}")
 
-    # Example MovementStub
-    try:
-        movement1 = MovementStub(
-            id="movement_1",
-            name="First Movement",
-            samples=[
-                SampleStub(id="L1.1", seed_description="Tape loop 1", duration_s=15.0),
-                SampleStub(id="L1.2", seed_description="Tape loop 2", duration_s=20.0),
-                SampleStub(
-                    id="A1", seed_description="Granular texture", duration_s=10.0
-                ),
-            ],
-        )
-        print(f"\nValid MovementStub: {movement1.model_dump_json(indent=2)}")
-    except Exception as e:
-        print(f"Error creating MovementStub: {e}")
-
     # Example DesignerOutput
     try:
         design_output = DesignerOutput(
             brief_slug="test-collection",
-            movements=[movement1],  # Using movement1 from above
+            samples=[sample1],  # Using sample1 from above
         )
         print(f"\nValid DesignerOutput: {design_output.model_dump_json(indent=2)}")
     except Exception as e:
@@ -222,7 +169,6 @@ if __name__ == "__main__":
         analyzer_out = AnalyzerOutput(
             effect_name="warm_evolving_pad",
             duration=15.0,
-            sample_rate=48000,
             description="Create a multi-layered pad using sine waves detuned slightly. Apply a slow attack envelope (around 3 seconds) and a long release (around 5 seconds). Add a resonant low-pass filter with its cutoff slowly opening over the duration of the sound. Include subtle stereo chorus and a spacious reverb.",
         )
         print(f"\nValid AnalyzerOutput: {analyzer_out.model_dump_json(indent=2)}")

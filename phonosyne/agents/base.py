@@ -16,7 +16,6 @@ Key features:
 @dependencies
 - `abc.ABC`, `abc.abstractmethod` for creating abstract classes.
 - `openai.OpenAI` or a compatible client for LLM interactions.
-  (Using `smolagents.SmolOpenAIAgent` as a reference or direct use of `openai` client)
 - `httpx` for potential timeout configurations if using `openai` client directly.
 - `tenacity` for retry mechanisms.
 - `pathlib.Path` for file operations (loading prompts).
@@ -35,15 +34,6 @@ import abc
 import logging
 from pathlib import Path
 from typing import Any, Dict, Generic, Optional, Type, TypeVar
-
-# Attempt to use smolagents' client or a direct OpenAI client
-try:
-    from smolagents import SmolOpenAIAgent  # For structure reference
-
-    # If using SmolOpenAIAgent directly, it handles retries and client setup.
-    # However, the plan implies a more direct OpenAI client usage for Phonosyne.
-except ImportError:
-    SmolOpenAIAgent = None
 
 import httpx
 from openai import APIError, APITimeoutError, OpenAI, RateLimitError
@@ -163,8 +153,7 @@ class AgentBase(abc.ABC, Generic[InputSchema, OutputSchema]):
                 # Check OpenRouter documentation for model-specific JSON mode support.
                 # For now, we assume it's available if requested.
                 # If not, the agent will have to parse JSON from string output.
-                # response_kwargs["response_format"] = {"type": "json_object"} # This is standard OpenAI
-                pass  # JSON mode handling might need to be model-specific or done via prompt engineering
+                response_kwargs["response_format"] = {"type": "json_object"}
 
             completion = self.client.chat.completions.create(**response_kwargs)
 

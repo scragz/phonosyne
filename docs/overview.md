@@ -32,13 +32,11 @@ The process begins when the user invokes Phonosyne via its CLI or SDK.
   - `DesignerAgent` uses its system prompt (`prompts/designer.md`) and the configured LLM (`MODEL_DESIGNER`) to generate a structured plan.
   - The LLM is instructed to output a JSON object.
 - **Output**: A `DesignerOutput` Pydantic model (defined in `phonosyne.agents.schemas`). This model contains:
-  - `brief_slug`: A slugified version of the user brief.
-  - `movements`: A list of `MovementStub` objects. Each `MovementStub` includes:
-    - `id` and `name` for the movement.
-    - `samples`: A list of `SampleStub` objects. Each `SampleStub` contains:
-      - `id`: Unique ID for the sample (e.g., "L1.1").
-      - `seed_description`: A concise textual description of the sound.
-      - `duration_s`: The target duration in seconds.
+  - `theme`: A short description of the user brief.
+  - `samples`: A list of `SampleStub` objects. Each `SampleStub` contains:
+    - `id`: Unique ID for the sample (e.g., "L1.1").
+    - `seed_description`: A concise textual description of the sound.
+    - `duration_s`: The target duration in seconds.
 - **Data Flow**: `str (user_brief) -> DesignerAgent -> DesignerOutput (Pydantic model)`
 
 ### 3. Sample Generation Loop (Orchestrated by Manager)
@@ -55,7 +53,6 @@ The `Manager` iterates through each `SampleStub` in the `DesignerOutput` plan. F
 - **Output**: An `AnalyzerOutput` Pydantic model. This model contains:
   - `effect_name`: A slugified name for the sound.
   - `duration`: Target duration (float, seconds).
-  - `sample_rate`: Target sample rate (int, Hz, typically from `settings.DEFAULT_SR`).
   - `description`: A rich, natural-language text detailing how to synthesize the sound (layers, waveforms, envelopes, effects, etc.).
 - **Data Flow**: `AnalyzerInput (from SampleStub) -> AnalyzerAgent -> AnalyzerOutput (Pydantic model)`
 

@@ -243,7 +243,7 @@ class Manager:
                 designer_input.model_dump()
             )
             logger.info(
-                f"DesignerAgent completed. Plan slug: {design_plan.brief_slug}, Movements: {len(design_plan.movements)}"
+                f"DesignerAgent completed. Plan theme: {design_plan.theme}, Samples: {len(design_plan.samples)}"
             )
         except Exception as e:
             logger.error(f"DesignerAgent failed: {e}", exc_info=self.verbose)
@@ -254,17 +254,15 @@ class Manager:
                 "output_dir": None,
             }
 
+        brief_slug = slugify(design_plan.theme[:50])
+
         # Prepare output directory for this run
-        run_output_dir_name = slugify(
-            f"{time.strftime('%Y%m%d-%H%M%S')}_{design_plan.brief_slug}"
-        )
+        run_output_dir_name = slugify(f"{time.strftime('%Y%m%d-%H%M%S')}_{brief_slug}")
         run_output_dir = self.output_base_dir / run_output_dir_name
         run_output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Output directory for this run: {run_output_dir}")
 
-        all_sample_stubs: List[SampleStub] = []
-        for movement in design_plan.movements:
-            all_sample_stubs.extend(movement.samples)
+        all_sample_stubs: List[SampleStub] = design_plan.samples
 
         num_total_samples = len(all_sample_stubs)
         logger.info(f"Total samples to generate: {num_total_samples}")
@@ -323,7 +321,7 @@ class Manager:
                     executor.submit(
                         Manager._static_process_single_sample,
                         stub,
-                        design_plan.brief_slug,
+                        brief_slug,
                         run_output_dir,
                         self.verbose,
                     ): stub
@@ -366,7 +364,7 @@ class Manager:
             ):
                 try:
                     result = Manager._static_process_single_sample(
-                        stub, design_plan.brief_slug, run_output_dir, self.verbose
+                        stub, brief_slug, run_output_dir, self.verbose
                     )
                     results.append(result)
                 except Exception as e:
@@ -387,7 +385,7 @@ class Manager:
 
         manifest_data = {
             "user_brief": user_brief,
-            "brief_slug": design_plan.brief_slug,
+            "brief_slug": brief_slug,
             "output_directory": str(
                 run_output_dir.relative_to(Path.cwd())
             ),  # Relative path
@@ -395,8 +393,8 @@ class Manager:
             "total_samples_succeeded": len(successful_samples),
             "total_samples_failed": failed_samples_count,
             "generation_time_seconds": time.time() - start_time,
-            "movements": design_plan.model_dump()[
-                "movements"
+            "samples": design_plan.model_dump()[
+                "samples"
             ],  # Include original plan structure
             "sample_results": [
                 res.model_dump(exclude_none=True, mode="json") for res in results

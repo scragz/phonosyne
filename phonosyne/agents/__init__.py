@@ -34,7 +34,6 @@ from .schemas import (
     AnalyzerInput,
     AnalyzerOutput,
     DesignerOutput,
-    MovementStub,
     SampleStub,
 )
 
@@ -44,7 +43,6 @@ __all__ = [
     "DesignerAgentInput",
     "AnalyzerAgent",
     "CompilerAgent",
-    "MovementStub",
     "SampleStub",
     "DesignerOutput",
     "AnalyzerInput",

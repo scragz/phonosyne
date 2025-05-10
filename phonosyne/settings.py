@@ -28,8 +28,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # LLM Model Configuration
-MODEL_DESIGNER: str = os.getenv("MODEL_DESIGNER", "google/gemini-2.5-pro-preview-03-25")
-MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", "google/gemini-2.5-pro-preview-03-25")
+MODEL_DESIGNER: str = os.getenv("MODEL_DESIGNER", "google/gemini-2.5-flash-preview")
+MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", "google/gemini-2.5-flash-preview")
 MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", "google/gemini-2.5-pro-preview-03-25")
 
 # Audio Processing Settings

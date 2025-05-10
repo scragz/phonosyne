@@ -31,7 +31,7 @@ Key features:
 import logging
 from typing import Any, Dict
 
-from pydantic import BaseModel, Field  # For a simple input wrapper
+from pydantic import BaseModel, Field, ValidationError  # For a simple input wrapper
 
 from phonosyne import settings
 from phonosyne.agents.base import AgentBase

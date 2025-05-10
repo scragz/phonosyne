@@ -78,7 +78,7 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
     # The spec for validate_wav says "SR, duration +-0.5s, bit-depth, peak checks"
     # The AnalyzerOutput schema has `sample_rate` which defaults to settings.DEFAULT_SR
     # So, `spec.sample_rate` should be the target.
-    expected_sr = spec.sample_rate
+    expected_sr = settings.DEFAULT_SR
     if info.samplerate != expected_sr:
         errors.append(
             f"Sample rate mismatch: expected {expected_sr}, got {info.samplerate}."
