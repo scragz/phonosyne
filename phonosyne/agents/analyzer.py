@@ -98,7 +98,7 @@ class AnalyzerAgent(Agent):
             name=agent_name,
             instructions=ANALYZER_INSTRUCTIONS,
             model=model_arg,  # Pass the model name or Model instance
-            output_type=AnalyzerOutput,  # Ensures structured JSON output
+            # output_type=AnalyzerOutput,  # Temporarily removed to rely on prompt for JSON structure
             tools=[],  # AnalyzerAgent itself does not use tools
             **kwargs,
         )

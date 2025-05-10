@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # LLM Model Configuration
-MODEL_DEFAULT: str = os.getenv("MODEL_DEFAULT", "google/gemini-2.5-pro-preview")
+MODEL_DEFAULT: str = os.getenv("MODEL_DEFAULT", "google/gemini-2.5-flash-preview")
 MODEL_DESIGNER: str = os.getenv("MODEL_DESIGNER", MODEL_DEFAULT)
 MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", MODEL_DEFAULT)
 MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", MODEL_DEFAULT)

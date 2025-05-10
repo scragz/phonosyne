@@ -107,7 +107,7 @@ class DesignerAgent(Agent):
             name=agent_name,
             instructions=DESIGNER_INSTRUCTIONS,
             model=model_arg,  # Pass the model name or Model instance
-            output_type=DesignerOutput,  # Ensures structured JSON output matching DesignerOutput
+            # output_type=DesignerOutput, # Temporarily removed to rely on prompt for JSON structure
             tools=[],  # DesignerAgent itself does not use tools
             **kwargs,  # Pass through any other agent parameters
         )
