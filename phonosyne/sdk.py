@@ -6,15 +6,20 @@ This module contains the core SDK logic for Phonosyne, including the
 """
 
 import asyncio
+import logging
 import os
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from agents import (
+    Agent,
     Model,
     ModelProvider,
     OpenAIChatCompletionsModel,
     RunConfig,
+    RunContextWrapper,
+    RunHooks,
     Runner,
+    Tool,
     set_tracing_disabled,
 )
 from openai import AsyncOpenAI
@@ -66,6 +71,72 @@ class OpenRouterModelProvider(ModelProvider):
 OPENROUTER_MODEL_PROVIDER = OpenRouterModelProvider()
 # --- End OpenRouter Configuration ---
 
+# --- Logging Configuration ---
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)  # Or your desired level
+
+TContext = TypeVar("TContext")
+
+
+class LoggingRunHooks(RunHooks[TContext]):
+    """
+    A RunHooks implementation that logs all lifecycle events.
+    """
+
+    async def on_agent_start(
+        self,
+        context: RunContextWrapper[TContext],
+        agent: Agent[TContext],
+    ) -> None:
+        logger.info(
+            f"Agent Start: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Context ID: {context.run_id}"
+        )
+
+    async def on_agent_end(
+        self,
+        context: RunContextWrapper[TContext],
+        agent: Agent[TContext],
+        output: Any,
+    ) -> None:
+        logger.info(
+            f"Agent End: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Context ID: {context.run_id}, Output: {str(output)[:100]}..."
+        )  # Log snippet of output
+
+    async def on_handoff(
+        self,
+        context: RunContextWrapper[TContext],
+        from_agent: Agent[TContext],
+        to_agent: Agent[TContext],
+    ) -> None:
+        logger.info(
+            f"Handoff: From {from_agent.name if hasattr(from_agent, 'name') else from_agent.__class__.__name__} to {to_agent.name if hasattr(to_agent, 'name') else to_agent.__class__.__name__}, Context ID: {context.run_id}"
+        )
+
+    async def on_tool_start(
+        self,
+        context: RunContextWrapper[TContext],
+        agent: Agent[TContext],
+        tool: Tool,
+    ) -> None:
+        logger.info(
+            f"Tool Start: {tool.name if hasattr(tool, 'name') else tool.__class__.__name__} by Agent: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Context ID: {context.run_id}"
+        )
+
+    async def on_tool_end(
+        self,
+        context: RunContextWrapper[TContext],
+        agent: Agent[TContext],
+        tool: Tool,
+        result: str,
+    ) -> None:
+        logger.info(
+            f"Tool End: {tool.name if hasattr(tool, 'name') else tool.__class__.__name__} by Agent: {agent.name if hasattr(agent, 'name') else agent.__class__.__name__}, Context ID: {context.run_id}, Result: {str(result)[:100]}..."
+        )  # Log snippet of result
+
+
+DEFAULT_LOGGING_HOOKS = LoggingRunHooks()
+# --- End Logging Configuration ---
+
 
 async def run_prompt(
     prompt: str,
@@ -83,6 +154,7 @@ async def run_prompt(
         starting_agent=orchestrator_agent,
         input=prompt,
         run_config=RunConfig(model_provider=OPENROUTER_MODEL_PROVIDER),
+        hooks=DEFAULT_LOGGING_HOOKS,  # Add the logging hooks
     )
 
     return result.final_output
