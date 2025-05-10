@@ -20,9 +20,9 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
 
 ```json
 {
-  "effect_name": "a_concise_snake_case_slug_derived_from_the_input",
+  "effect_name": "[ID]_[a_concise_snake_case_slug_derived_from_the_input]",
   "duration": 20.0, // This MUST be a float and EXACTLY match the `duration_s` from your input.
-  "description": "Detailed natural-language instructions (approximately 40-120 words) for synthesizing the sound. Explain layers, waveforms, envelopes, filters, effects, modulation, panning (if conceptual before mono sum), and mixing levels in clear, unambiguous, technical prose. For example: 'Layer 1: Begin with a sawtooth wave at 80Hz. Apply a filter envelope with a 500ms attack to a low-pass filter, sweeping its cutoff from 200Hz to 1.5kHz...'"
+  "description": "Detailed natural-language instructions (approximately 200-1000 words) for synthesizing the sound. Explain layers, waveforms, envelopes, filters, effects, modulation, panning (if conceptual before mono sum), and mixing levels in clear, unambiguous, technical prose. For example: 'Layer 1: Begin with a sawtooth wave at 80Hz. Apply a filter envelope with a 500ms attack to a low-pass filter, sweeping its cutoff from 200Hz to 1.5kHz...'"
 }
 ```
 
@@ -30,7 +30,7 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
 
 1. **`effect_name` (String)**:
 
-   - Generate a concise and descriptive `snake_case_slug` for the sound effect. This slug should be suitable for use in filenames and can be derived from the input `seed_description` or `id`. Example: `deep_resonant_drone`.
+   - Generate a concise and descriptive `snake_case_slug` for the sound effect, prefixed with the `id`. This slug should be suitable for use in filenames and should be derived from the input `seed_description`. Example: `L1.1_deep_resonant_drone`.
 
 2. **`duration` (Float)**:
 

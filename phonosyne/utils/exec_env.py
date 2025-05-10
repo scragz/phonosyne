@@ -84,6 +84,7 @@ AUTHORIZED_IMPORTS_FOR_DSP = [
     "math",
     "random",
     "array",  # Python's array module, sometimes useful
+    "json",  # For JSON handling if needed
     # Phonosyne's own DSP utils will be added here once created (Step 4.1 - skipped for now)
     # "phonosyne.dsp.utils",
     # "phonosyne.dsp.utils.*",
@@ -104,10 +105,10 @@ class SecurityException(CodeExecutionError):  # Keep for compatibility if used e
 
 def run_code(
     code: str,
-    output_filename: str,  # e.g., "sample_01.wav"
-    recipe_description: str,
-    recipe_duration: float,
-    recipe_json_str: str,  # Added: The full recipe JSON string
+    output_filename: str,
+    recipe_description: str = "",
+    recipe_duration: float = 15.0,
+    recipe_json_str: str = "",
     # Default to "local_executor" if settings.EXECUTION_MODE is "subprocess" (old default)
     mode: Literal["local_executor", "inline"] = (
         "local_executor"
@@ -177,6 +178,7 @@ def run_code(
         executor.send_tools({"hash": hash})
         # Inject recipe-specific variables into the executor's state
         variables_to_send = {
+            "output_filename": output_filename,
             "description": recipe_description,
             "duration": recipe_duration,
             "recipe_json": recipe_json_str,  # Make the JSON string available as 'recipe_json'

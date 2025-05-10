@@ -19,7 +19,7 @@ Your output MUST be a single-line JSON object string. Each of the 18 samples wit
     {
       "id": "L1.1", // String. See ID pattern rules below.
       "duration_s": 24.0, // Float. See duration rules below.
-      "seed_description": "String. Concise (<= 60 words), vivid, and technically descriptive text for this sound (e.g., waveforms, modulations, filter sweeps). Do not use the words 'lubadh' or 'arbhar' in this description unless it is a core conceptual element requested by the user brief."
+      "seed_description": "String. Concise (<= 200 words), vivid, and technically descriptive text for this sound (e.g., waveforms, modulations, filter sweeps). Do not use the words 'lubadh' or 'arbhar' in this description unless it is a core conceptual element requested by the user brief."
     }
     // ... other 17 sample objects, each a complete JSON object like the example above ...
   ]

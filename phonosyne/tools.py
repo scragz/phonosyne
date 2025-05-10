@@ -57,11 +57,20 @@ async def execute_python_dsp_code(
     """
     try:
         recipe_data = json.loads(recipe_json)
+
+        if not isinstance(recipe_data, dict):
+            return f"Error: recipe_json did not decode to a dictionary. Decoded to: {type(recipe_data)}"
+
         description = recipe_data.get("description")
         duration = recipe_data.get("duration")
 
         if description is None or duration is None:
-            return "Error: 'description' or 'duration' missing from recipe_json."
+            missing_keys = []
+            if description is None:
+                missing_keys.append("'description'")
+            if duration is None:
+                missing_keys.append("'duration'")
+            return f"Error: {', '.join(missing_keys)} missing from recipe_json."
 
         # existing_run_code is synchronous. The openai-agents SDK's @function_tool
         # should handle running synchronous functions in a thread pool if called from an async agent.
@@ -72,6 +81,7 @@ async def execute_python_dsp_code(
             output_filename=output_filename,
             recipe_description=str(description),  # Ensure string type for description
             recipe_duration=float(duration),  # Ensure float type for duration
+            recipe_json_str=recipe_json,  # Pass the received recipe_json string
             mode="local_executor",
         )
         return str(wav_path)

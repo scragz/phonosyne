@@ -59,6 +59,9 @@ EXECUTION_MODE: str = os.getenv("PHONOSYNE_EXECUTION_MODE", "subprocess")
 MAX_LLM_CODE_OPERATIONS: int = int(
     os.getenv("MAX_LLM_CODE_OPERATIONS", 5_000_000)
 )  # Max operations for LocalPythonExecutor
+MAX_ORCHESTRATOR_SAMPLE_RETRIES: int = int(
+    os.getenv("MAX_ORCHESTRATOR_SAMPLE_RETRIES", 2)
+)  # Max retries for a single sample if compilation fails
 
 # Concurrency
 # Default number of worker processes for parallel tasks.
