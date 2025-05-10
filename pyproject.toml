@@ -1,0 +1,42 @@
+[project]
+name = "phonosyne"
+version = "0.1.0"
+description = "Phonosyne: Multi-Agent Sound-Library Generator"
+readme = "README.md"
+authors = [{ name = "Phonosyne Developer", email = "developer@example.com" }]
+license = "MIT"
+requires-python = ">=3.12"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Other Audience",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Artistic Software",
+  "Topic :: Multimedia :: Sound/Audio :: Sound Synthesis",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "smolagents",
+  "openai",
+  "numpy",
+  "scipy",
+  "soundfile",
+  "typer",
+  "tqdm",
+  "pydantic",
+  "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "ruff", "mypy", "vcrpy"]
+
+[project.scripts]
+phonosyne = "phonosyne.cli:app"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["phonosyne"]

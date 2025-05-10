@@ -1,0 +1,73 @@
+"""
+Phonosyne Settings
+
+This module contains global constants and configuration settings for the Phonosyne application.
+These settings control various aspects of the sound generation pipeline, including
+LLM models, audio parameters, file output, and execution behavior.
+
+Key features:
+- Centralized configuration for easy management.
+- Defines default models for different agent stages.
+- Specifies audio characteristics like sample rate.
+- Sets operational limits like timeouts and iteration counts.
+
+@dependencies
+- `pathlib.Path` for defining file system paths.
+
+@notes
+- These constants can be overridden if necessary, though the primary mechanism
+  for user-specific configuration (like API keys) is via .env files.
+- Model names should correspond to valid identifiers on the configured LLM provider (e.g., OpenRouter).
+"""
+
+import os
+from pathlib import Path
+
+# LLM Model Configuration
+MODEL_DESIGNER: str = os.getenv(
+    "MODEL_DESIGNER", "openrouter/anthropic/claude-3-haiku-20240307"
+)
+MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", "openrouter/google/gemini-flash-1.5")
+MODEL_COMPILER: str = os.getenv(
+    "MODEL_COMPILER", "openrouter/anthropic/claude-3-haiku-20240307"
+)  # Using Haiku for cost/speed
+
+# Audio Processing Settings
+DEFAULT_SR: int = 48_000  # Default sample rate in Hz
+TARGET_PEAK_DBFS: float = -1.0  # Target peak level in dBFS for normalization
+DURATION_TOLERANCE_S: float = 0.5  # Allowed duration tolerance in seconds
+BIT_DEPTH: int = 32  # Bit depth for output WAV files (32-bit float)
+
+# File System Settings
+DEFAULT_OUT_DIR: Path = Path("./output")
+PROMPTS_DIR: Path = Path("./prompts")
+
+# Agent & Compiler Settings
+MAX_COMPILER_ITERATIONS: int = (
+    10  # Maximum attempts for the CompilerAgent to generate valid code
+)
+COMPILER_TIMEOUT_S: int = 300  # Timeout in seconds for a single compiler execution run
+AGENT_MAX_RETRIES: int = 3  # Maximum retries for an agent call if it fails
+
+# Execution Environment
+# Supported modes: "subprocess", "inline"
+# "subprocess": Executes generated code in a sandboxed Python subprocess. Safer.
+# "inline": Executes generated code using exec() in the current process. Faster, for testing.
+EXECUTION_MODE: str = os.getenv("PHONOSYNE_EXECUTION_MODE", "subprocess")
+
+# Concurrency
+# Default number of worker processes for parallel tasks.
+# Can be overridden by --workers CLI flag or PHONOSYNE_WORKERS env var.
+DEFAULT_WORKERS: int = min(os.cpu_count() or 1, 8)
+
+# API Keys - typically loaded from .env
+OPENROUTER_API_KEY: str | None = os.getenv("OPENROUTER_API_KEY")
+
+# Logging
+LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_FILE: Path | None = (
+    None  # Set to a Path object to enable file logging, e.g., Path("phonosyne.log")
+)
+
+# UI/UX
+USE_ANSI_COLORS: bool = os.getenv("NO_COLOR") is None and os.getenv("TERM") != "dumb"
