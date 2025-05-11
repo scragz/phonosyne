@@ -11,6 +11,7 @@ from .fuzz import apply_fuzz
 from .long_reverb import apply_long_reverb
 from .noise_gate import apply_noise_gate
 from .overdrive import apply_overdrive
+from .particle import apply_particle
 from .phaser import apply_phaser
 from .rainbow_machine import apply_rainbow_machine
 from .short_reverb import apply_short_reverb
@@ -35,4 +36,5 @@ __all__ = [
     "apply_overdrive",
     "apply_fuzz",
     "apply_rainbow_machine",
+    "apply_particle",
 ]
