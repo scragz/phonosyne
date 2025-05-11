@@ -73,7 +73,7 @@ The `OrchestratorAgent`'s LLM iterates through each sound stub derived from the 
      - The generated code **must return a tuple `(audio_data_numpy_array, sample_rate_int)`**.
      - The agent extracts the Python code from the LLM's response.
   2. **Code Execution (`phonosyne.utils.exec_env.run_code`)**:
-     - The Python code string is passed to `run_code` (using `"local_executor"` mode).
+     - The Python code string is passed to `run_code`.
      - `LocalPythonExecutor` executes the code, returning `(audio_data, sample_rate)`.
      - `run_code` saves this to a temporary `.wav` file and returns its path.
   3. **Validation (via `phonosyne.dsp.validators.validate_wav`)**:

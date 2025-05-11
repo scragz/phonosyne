@@ -87,7 +87,6 @@ async def execute_python_dsp_code(
             recipe_description=str(description),  # Ensure string type for description
             recipe_duration=float(duration),  # Ensure float type for duration
             recipe_json_str=recipe_json,  # Pass the received recipe_json string
-            mode="local_executor",
         )
         return str(wav_path.resolve())
     except json.JSONDecodeError as e:
