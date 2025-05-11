@@ -22,7 +22,7 @@ from agents import (
     Tool,
     set_tracing_disabled,
 )
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 
 from . import settings  # Import the settings module
 
@@ -138,6 +138,23 @@ DEFAULT_LOGGING_HOOKS = LoggingRunHooks()
 # --- End Logging Configuration ---
 
 
+class PhonosyneError(Exception):
+    """Base exception class for Phonosyne-specific errors."""
+
+    pass
+
+
+class OpenRouterCreditsError(PhonosyneError):
+    """Exception raised when OpenRouter credits are exhausted."""
+
+    def __init__(
+        self,
+        message="OpenRouter credits exhausted. Please add more credits to your account.",
+    ):
+        self.message = message
+        super().__init__(self.message)
+
+
 async def run_prompt(
     prompt: str,
     **kwargs: Any,
@@ -145,17 +162,49 @@ async def run_prompt(
     """
     Main SDK entry point to run the Phonosyne generation pipeline using OrchestratorAgent,
     configured to use OpenRouter.
+
+    Raises:
+        OpenRouterCreditsError: When OpenRouter credits are exhausted
+        PhonosyneError: For other Phonosyne-specific errors
+        Exception: For other unexpected errors
     """
     from .agents.orchestrator import OrchestratorAgent  # Import here
 
     orchestrator_agent = OrchestratorAgent(**kwargs)
 
-    result = await Runner.run(
-        starting_agent=orchestrator_agent,
-        input=prompt,
-        max_turns=settings.MAX_TURNS,
-        run_config=RunConfig(model_provider=OPENROUTER_MODEL_PROVIDER),
-        hooks=DEFAULT_LOGGING_HOOKS,  # Add the logging hooks
-    )
-
-    return result.final_output
+    try:
+        result = await Runner.run(
+            starting_agent=orchestrator_agent,
+            input=prompt,
+            max_turns=settings.MAX_TURNS,
+            run_config=RunConfig(model_provider=OPENROUTER_MODEL_PROVIDER),
+            hooks=DEFAULT_LOGGING_HOOKS,  # Add the logging hooks
+        )
+        return result.final_output
+    except TypeError as e:
+        if "'NoneType' object is not subscriptable" in str(e):
+            logger.error(
+                "OpenRouter API error: NoneType is not subscriptable. This likely means your OpenRouter credits are exhausted."
+            )
+            raise OpenRouterCreditsError(
+                "OpenRouter credits exhausted. Please add more credits to your account."
+            ) from e
+        raise
+    except OpenAIError as e:
+        # Handle OpenAI API errors that might be related to credits or authentication
+        error_message = str(e).lower()
+        if "insufficient" in error_message and (
+            "credits" in error_message
+            or "funds" in error_message
+            or "balance" in error_message
+        ):
+            logger.error(f"OpenRouter API error: {str(e)}")
+            raise OpenRouterCreditsError(
+                "OpenRouter credits exhausted. Please add more credits to your account."
+            ) from e
+        else:
+            logger.error(f"OpenAI API error: {str(e)}")
+            raise PhonosyneError(f"OpenAI API error: {str(e)}") from e
+    except Exception as e:
+        logger.error(f"Unexpected error in Phonosyne pipeline: {str(e)}")
+        raise

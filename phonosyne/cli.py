@@ -37,6 +37,7 @@ from rich.text import Text
 from phonosyne import __version__  # To display version
 from phonosyne import run_prompt as sdk_run_prompt  # Alias to avoid conflict
 from phonosyne import settings
+from phonosyne.sdk import OpenRouterCreditsError, PhonosyneError
 
 # Initialize Typer app
 app = typer.Typer(
@@ -120,6 +121,17 @@ def run(  # Changed to synchronous def
             )
             raise typer.Exit(code=1)
 
+    except OpenRouterCreditsError as e:
+        error_console.print(f"\n💥 OpenRouter Credits Exhausted:", style="bold red")
+        error_console.print(str(e))
+        error_console.print(
+            "Please add more credits to your OpenRouter account and try again."
+        )
+        raise typer.Exit(code=1)
+    except PhonosyneError as e:
+        error_console.print(f"\n💥 Phonosyne Error:", style="bold red")
+        error_console.print(str(e))
+        raise typer.Exit(code=1)
     except Exception as e:
         error_console.print(
             f"\n💥 An critical error occurred in the CLI or Phonosyne pipeline:"
@@ -128,9 +140,9 @@ def run(  # Changed to synchronous def
         if verbose:
             # In verbose mode, the full traceback would have been logged by the logger.
             # For non-verbose, we might want to print it here.
-            # import traceback
-            # error_console.print(traceback.format_exc())
-            pass
+            import traceback
+
+            error_console.print(traceback.format_exc())
         raise typer.Exit(code=1)
 
 

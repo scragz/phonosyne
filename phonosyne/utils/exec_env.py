@@ -76,16 +76,15 @@ RESTRICTED_GLOBALS_INLINE: Dict[str, Any] = {
 # Common safe DSP modules:
 AUTHORIZED_IMPORTS_FOR_DSP = [
     "numpy",
-    "numpy.*",  # Allow submodules like numpy.random
-    "scipy",  # Removing general scipy to be more specific
-    "soundfile",  # For sf.write if code were to write, but now it returns array
+    "numpy.*",
+    "scipy",
+    "scipy.*",
+    "soundfile",
     "math",
     "random",
-    "array",  # Python's array module, sometimes useful
-    "json",  # For JSON handling if needed
-    # Phonosyne's own DSP utils will be added here once created (Step 4.1 - skipped for now)
-    # "phonosyne.dsp.utils",
-    # "phonosyne.dsp.utils.*",
+    "array",
+    "json",
+    "phonosyne.dsp.effects.*",
 ]
 
 
