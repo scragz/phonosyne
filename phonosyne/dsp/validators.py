@@ -39,8 +39,6 @@ from phonosyne.agents.schemas import AnalyzerOutput  # For spec type hint
 
 logger = logging.getLogger(__name__)
 
-PERFORM_PEAK_CHECK = False
-
 
 class ValidationFailedError(Exception):
     """Custom exception for WAV validation failures."""
@@ -119,20 +117,41 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
             f"Channel count mismatch: expected 1 (mono), got {info.channels}."
         )
 
+    # Read audio data once for subsequent checks (Peak and Silence)
+    audio_data_mono = None
+    try:
+        # Read the raw audio data
+        raw_audio_data, read_sr = sf.read(file_path, dtype="float32", always_2d=False)
+        # Note: sf.read by default gives sr of file, which we already have in info.samplerate
+
+        # Ensure it's mono for peak and silence checks
+        if raw_audio_data.ndim > 1:
+            if raw_audio_data.shape[1] == 1:  # Already mono but in 2D array
+                audio_data_mono = raw_audio_data[:, 0]
+            else:  # Actual stereo or multi-channel
+                # This case should ideally be caught by the channel check earlier if spec is mono.
+                # If it reaches here and is multi-channel, it's an unexpected state.
+                # For robustness in calculation, we'll average to mono.
+                # A warning/error about unexpected channels might be better if spec is strictly mono.
+                logger.debug(
+                    f"Audio data for {file_path} has {raw_audio_data.shape[1]} channels; averaging to mono for peak/silence check."
+                )
+                audio_data_mono = np.mean(raw_audio_data, axis=1)
+        else:
+            audio_data_mono = raw_audio_data
+
+    except Exception as e:
+        msg = f"Could not read audio data from {file_path} for peak/silence checks: {e}"
+        logger.error(msg)
+        errors.append(msg)
+        # If audio can't be read, peak and silence checks below will be skipped if they depend on audio_data_mono
+
     # 5. Check Peak Level
     # Technical spec: "Peak level <= -1 dBFS"
     # settings.TARGET_PEAK_DBFS = -1.0
-    if PERFORM_PEAK_CHECK:
+    if audio_data_mono is not None:  # Only proceed if audio was read successfully
         try:
-            audio_data, _ = sf.read(file_path, dtype="float32")
-            if (
-                audio_data.ndim > 1
-            ):  # If stereo (should have been caught by channel check)
-                audio_data = np.mean(
-                    audio_data, axis=1
-                )  # Convert to mono for peak check, though ideally it's already mono
-
-            peak_linear = np.max(np.abs(audio_data))
+            peak_linear = np.max(np.abs(audio_data_mono))
             if peak_linear == 0:  # Avoid log(0)
                 peak_dbfs = -np.inf
             else:
@@ -144,9 +163,24 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
                     f"expected <= {settings.TARGET_PEAK_DBFS:.2f} dBFS."
                 )
         except Exception as e:
-            msg = f"Could not read audio data for peak check from {file_path}: {e}"
+            msg = f"Error during peak check for {file_path}: {e}"
             logger.error(msg)
-            errors.append(msg)  # Add as a validation error string
+            errors.append(msg)
+
+    # 6. Check for Silence
+    # Use a small threshold to define silence.
+    # This value means that the loudest sample is quieter than -100dBFS.
+    # SILENCE_THRESHOLD_LINEAR = 10**(-100 / 20) # Moved to settings.py
+    if audio_data_mono is not None:  # Only proceed if audio was read successfully
+        try:
+            if np.max(np.abs(audio_data_mono)) < settings.SILENCE_THRESHOLD_LINEAR:
+                errors.append(
+                    f"Audio content is effectively silent (peak < {settings.SILENCE_THRESHOLD_LINEAR:.0e} linear, or {settings.SILENCE_THRESHOLD_DBFS:.0f} dBFS)."
+                )
+        except Exception as e:
+            msg = f"Could not read audio data for silence check from {file_path}: {e}"  # Should be "Error during silence check"
+            logger.error(msg)
+            errors.append(msg)
 
     if errors:
         full_error_message = (
@@ -163,6 +197,9 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
 
 
 if __name__ == "__main__":
+    import shutil  # Import shutil here
+    import tempfile  # Import tempfile here
+
     logging.basicConfig(level=logging.DEBUG)
     logger.info("Testing WAV validator...")
 
@@ -247,13 +284,23 @@ if __name__ == "__main__":
     except ValidationFailedError as e:
         print(f"Validation FAILED for {stereo_wav_path} (expected): {e}")
 
+    # Test case 6: Silent WAV
+    silent_wav_path = temp_dir / "silent.wav"
+    audio_silent = np.zeros(int(sr * duration), dtype=np.float32)
+    sf.write(silent_wav_path, audio_silent, sr, subtype="FLOAT")
+    try:
+        print(f"\\n--- Validating {silent_wav_path} (should fail: silent audio) ---")
+        validate_wav(silent_wav_path, dummy_spec)
+        print(f"Validation PASSED for {silent_wav_path} (UNEXPECTED)")
+    except ValidationFailedError as e:
+        print(f"Validation FAILED for {silent_wav_path} (expected): {e}")
+
     # Clean up temporary directory
     try:
-        import shutil
-
+        # shutil was imported at the top of if __name__ == "__main__":
         shutil.rmtree(temp_dir)
-        print(f"\nCleaned up temporary directory: {temp_dir}")
+        print(f"\\nCleaned up temporary directory: {temp_dir}")
     except Exception as e:
         print(f"Error cleaning up temp dir {temp_dir}: {e}")
 
-    print("\nValidator testing complete.")
+    print("\\nValidator testing complete.")

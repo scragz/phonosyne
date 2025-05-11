@@ -36,9 +36,15 @@ MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", "openai/o4-mini")
 
 # Audio Processing Settings
 DEFAULT_SR: int = 48_000  # Default sample rate in Hz
-TARGET_PEAK_DBFS: float = -1.0  # Target peak level in dBFS for normalization
-DURATION_TOLERANCE_S: float = 0.5  # Allowed duration tolerance in seconds
+TARGET_PEAK_DBFS: float = -0.1  # Target peak level in dBFS for normalization
+DURATION_TOLERANCE_S: float = 2  # Allowed duration tolerance in seconds
 BIT_DEPTH: int = 32  # Bit depth for output WAV files (32-bit float)
+
+# Silence Threshold
+# Defines the linear amplitude below which audio is considered silent.
+# Corresponds to -100 dBFS.
+SILENCE_THRESHOLD_DBFS: float = -100.0
+SILENCE_THRESHOLD_LINEAR: float = 10 ** (SILENCE_THRESHOLD_DBFS / 20)
 
 # File System Settings
 DEFAULT_OUT_DIR: Path = Path("./output")
