@@ -29,20 +29,63 @@ Key features:
 - The "inline" mode's file writing expectation is different and might be deprecated.
 """
 
-import logging
-import os
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Literal, Tuple
+from smolagents.local_python_executor import InterpreterError, LocalPythonExecutor
 
+import logging
 import numpy as np
 import soundfile as sf
-from smolagents.local_python_executor import InterpreterError, LocalPythonExecutor
+import tempfile
+import shutil
+import json
 
 from phonosyne import settings
 
 logger = logging.getLogger(__name__)
+
+# <<< BEGIN MONKEY PATCH FOR scipy.sparse.coo.upcast >>>
+# This patch is to support LLM-generated code that might still refer to
+# scipy.sparse.coo.upcast, which has been removed from modern SciPy versions.
+# We attempt to add it to the underlying scipy.sparse._coo module.
+_monkey_patch_logger = logging.getLogger(__name__ + ".monkey_patch")
+
+try:
+    import scipy.sparse._coo as scipy_coo_module
+
+    # numpy is imported as np above
+
+    if not hasattr(scipy_coo_module, "upcast"):
+
+        def _upcast_shim(*args):
+            """
+            Shim for the removed scipy.sparse.coo.upcast.
+            Returns the nearest common type of a sequence of dtypes.
+            Based on numpy.find_common_type.
+            """
+            dtype_objects = [np.dtype(arg) for arg in args]
+            return np.find_common_type(dtype_objects, [])
+
+        scipy_coo_module.upcast = _upcast_shim
+        _monkey_patch_logger.info(
+            "Successfully monkey-patched scipy.sparse._coo.upcast to restore functionality "
+            "for LLM-generated code."
+        )
+    else:
+        _monkey_patch_logger.info(
+            "scipy.sparse._coo.upcast already exists. No monkey patch applied."
+        )
+except ImportError:
+    _monkey_patch_logger.warning(
+        "Could not import scipy.sparse._coo to attempt monkey-patching for upcast. "
+        "If LLM-generated code relies on a patched scipy.sparse.coo.upcast, it may fail."
+    )
+except Exception as e:
+    _monkey_patch_logger.error(
+        f"An unexpected error occurred while trying to monkey-patch scipy.sparse._coo.upcast: {e}",
+        exc_info=True,
+    )
+# <<< END MONKEY PATCH FOR scipy.sparse.coo.upcast >>>
 
 # Define a restricted global scope for inline execution (legacy)
 RESTRICTED_GLOBALS_INLINE: Dict[str, Any] = {
