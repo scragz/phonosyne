@@ -28,23 +28,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # LLM Model Configuration
-MODEL_DEFAULT: str = os.getenv("MODEL_DEFAULT", "openai/gpt-4.1")
+MODEL_DEFAULT: str = "openai/gpt-4.1"
 MODEL_ORCHESTRATOR: str = os.getenv("MODEL_ORCHESTRATOR", MODEL_DEFAULT)
 MODEL_DESIGNER: str = os.getenv("MODEL_DESIGNER", MODEL_DEFAULT)
 MODEL_ANALYZER: str = os.getenv("MODEL_ANALYZER", MODEL_DEFAULT)
-MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", "google/gemini-2.5-flash-preview")
+MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", MODEL_DEFAULT)
 
 # Audio Processing Settings
 DEFAULT_SR: int = 48_000  # Default sample rate in Hz
 TARGET_PEAK_DBFS: float = -0.1  # Target peak level in dBFS for normalization
 DURATION_TOLERANCE_S: float = 2  # Allowed duration tolerance in seconds
 BIT_DEPTH: int = 32  # Bit depth for output WAV files (32-bit float)
-
-# Silence Threshold
-# Defines the linear amplitude below which audio is considered silent.
-# Corresponds to -100 dBFS.
-SILENCE_THRESHOLD_DBFS: float = -100.0
-SILENCE_THRESHOLD_LINEAR: float = 10 ** (SILENCE_THRESHOLD_DBFS / 20)
+SILENCE_THRESHOLD_LINEAR: float = 10 ** (
+    -100 / 20
+)  # Linear threshold for silence detection
 
 # File System Settings
 DEFAULT_OUT_DIR: Path = Path("./output")
