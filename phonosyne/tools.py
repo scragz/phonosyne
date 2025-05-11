@@ -156,10 +156,11 @@ async def move_file(source_path: str, target_path: str) -> str:
 async def generate_manifest_file(manifest_data_json: str, output_directory: str) -> str:
     """
     Creates the manifest.json file in the specified output directory
-    based on the provided JSON data string.
+    based on the provided JSON data string. Attempts to extract a valid JSON object
+    from the input string if it's not perfectly formatted.
 
     Args:
-        manifest_data_json: A JSON string containing the aggregated data for the manifest.
+        manifest_data_json: A string potentially containing JSON data for the manifest.
         output_directory: The directory where manifest.json will be saved.
 
     Returns:
@@ -170,14 +171,50 @@ async def generate_manifest_file(manifest_data_json: str, output_directory: str)
         output_dir_path.mkdir(parents=True, exist_ok=True)
         manifest_file_path = output_dir_path / "manifest.json"
 
-        # Parse the JSON string to ensure it's valid before writing
-        parsed_data = json.loads(manifest_data_json)
+        # Attempt to extract a valid JSON object from the string
+        # This handles cases where the LLM might add leading/trailing text or markdown
+        content_to_parse = manifest_data_json.strip()
+
+        # Remove markdown code block fences if present
+        if content_to_parse.startswith("```json"):
+            content_to_parse = content_to_parse[len("```json") :]
+            if content_to_parse.endswith("```"):
+                content_to_parse = content_to_parse[: -len("```")]
+            content_to_parse = content_to_parse.strip()
+        elif content_to_parse.startswith("```"):
+            content_to_parse = content_to_parse[len("```") :]
+            if content_to_parse.endswith("```"):
+                content_to_parse = content_to_parse[: -len("```")]
+            content_to_parse = content_to_parse.strip()
+
+        # Find the first '{' or '[' to identify the start of a JSON structure
+        first_char_index = -1
+        first_brace_index = content_to_parse.find("{")
+        first_bracket_index = content_to_parse.find("[")
+
+        if first_brace_index != -1 and first_bracket_index != -1:
+            first_char_index = min(first_brace_index, first_bracket_index)
+        elif first_brace_index != -1:
+            first_char_index = first_brace_index
+        elif first_bracket_index != -1:
+            first_char_index = first_bracket_index
+
+        if first_char_index != -1:
+            json_string_to_decode = content_to_parse[first_char_index:]
+            # Use raw_decode to parse the first valid JSON object and ignore trailing data
+            decoder = json.JSONDecoder()
+            parsed_data, _ = decoder.raw_decode(json_string_to_decode)
+        else:
+            # If no JSON start character is found, this will likely fail, but try anyway
+            parsed_data = json.loads(content_to_parse)
 
         with open(manifest_file_path, "w", encoding="utf-8") as f:
-            json.dump(parsed_data, f, indent=2)  # Write the parsed data, pretty-printed
+            json.dump(parsed_data, f, indent=2)
         return f"Manifest generated successfully at {str(manifest_file_path)}"
     except json.JSONDecodeError as e:
-        return f"Error decoding manifest_data_json: {str(e)}"
+        # Log the original input string for better debugging if raw_decode also fails
+        # or if the initial content_to_parse was problematic before slicing.
+        return f"Error decoding manifest_data_json: {str(e)}. Processed string (first 200 chars): '{content_to_parse[:200]}...'. Original input (first 200 chars): '{manifest_data_json[:200]}...'"
     except Exception as e:
         return f"Error generating manifest file at {output_directory}/manifest.json: {str(e)}"
 

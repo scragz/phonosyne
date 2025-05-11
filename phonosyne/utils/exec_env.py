@@ -77,7 +77,7 @@ RESTRICTED_GLOBALS_INLINE: Dict[str, Any] = {
 AUTHORIZED_IMPORTS_FOR_DSP = [
     "numpy",
     "numpy.*",  # Allow submodules like numpy.random
-    "scipy",
+    # "scipy", # Removing general scipy to be more specific
     "scipy.signal",  # Specifically allow scipy.signal
     "scipy.fft",
     "soundfile",  # For sf.write if code were to write, but now it returns array
@@ -184,12 +184,6 @@ def run_code(
             "recipe_json": recipe_json_str,  # Make the JSON string available as 'recipe_json'
         }
         executor.send_variables(variables_to_send)
-        # MAX_LLM_CODE_OPERATIONS is not directly used by LocalPythonExecutor's constructor.
-        # It might be a setting for a different executor or an older version.
-        # For now, we rely on smolagents' internal limits or lack thereof for operations.
-        logger.debug(
-            f"LocalPythonExecutor initialized. settings.MAX_LLM_CODE_OPERATIONS (set in env) is {settings.MAX_LLM_CODE_OPERATIONS}, but not directly passed to this executor's constructor."
-        )
         try:
             # LocalPythonExecutor.__call__ returns a 3-tuple: (output, logs, is_final_answer)
             # The 'output' part is what we expect to be (audio_array, sample_rate).
