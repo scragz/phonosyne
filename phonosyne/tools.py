@@ -79,11 +79,11 @@ async def execute_python_dsp_code(
 
         # Sanitize output_filename to remove any leading slashes
         # to prevent it from being treated as an absolute path from root by Path.
-        sanitized_output_filename = output_filename.lstrip('/')
+        sanitized_output_filename = output_filename.lstrip("/")
 
         wav_path: Path = existing_run_code(
             code=code,
-            output_filename=sanitized_output_filename, # Use sanitized version
+            output_filename=sanitized_output_filename,  # Use sanitized version
             recipe_description=str(description),  # Ensure string type for description
             recipe_duration=float(duration),  # Ensure float type for duration
             recipe_json_str=recipe_json,  # Pass the received recipe_json string
