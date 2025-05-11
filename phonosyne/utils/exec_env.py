@@ -132,7 +132,7 @@ AUTHORIZED_IMPORTS_FOR_DSP = [
     "json",
     "phonosyne.dsp.effects",  # Allows generated code to 'import phonosyne.dsp.effects as fx' if ever needed for other reasons
     "phonosyne.dsp.effects.*",  # Allows generated code to 'from phonosyne.dsp.effects import some_utility' if ever needed
-    "phonosyne.settings", # Added to allow generated scripts to import settings
+    "phonosyne.settings",  # Added to allow generated scripts to import settings
 ]
 
 
@@ -170,8 +170,8 @@ def run_code(
     For "local_executor" mode:
     - Executes `code` using `LocalPythonExecutor`.
     - The `code` can expect `description` (str) and `duration` (float) to be available in its global scope.
-    - `code` MUST return a tuple: `(numpy.ndarray, int)` representing (audio_data, sample_rate).
-    - This function then saves the audio_data as a .wav file.
+    - `code` MUST return a single `numpy.ndarray` representing the audio data.
+    - This function then saves the audio_data as a .wav file using `settings.DEFAULT_SR`.
 
     For "inline" mode (legacy):
     - Executes `code` using `exec()`.
@@ -272,15 +272,17 @@ def run_code(
             "random": random,
             "array": array,  # The array module
             "json": json,  # json module itself
-            "settings": settings, # Make the phonosyne.settings module available globally
+            "settings": settings,  # Make the phonosyne.settings module available globally
         }
-        
+
         # Prepare functions/callables to be sent as tools
         functions_as_tools = {
             "hash": hash,  # Built-in hash function
             # Add other specific, safe built-ins or utilities if needed
         }
-        functions_as_tools.update(dsp_effect_tools)  # Add all dynamically loaded apply_... functions
+        functions_as_tools.update(
+            dsp_effect_tools
+        )  # Add all dynamically loaded apply_... functions
 
         # Combine recipe-specific variables with modules for send_variables
         all_variables_to_send = {
@@ -311,28 +313,22 @@ def run_code(
             if code_output is None:
                 raise CodeExecutionError(
                     "Code executed with LocalPythonExecutor returned None as its main output. "
-                    "Expected a tuple of (audio_array, sample_rate)."
+                    "Expected a numpy.ndarray."
                 )
 
-            if not isinstance(code_output, tuple) or len(code_output) != 2:
+            # Expect a single numpy array as output
+            if not isinstance(code_output, np.ndarray):
                 raise CodeExecutionError(
-                    "Code executed with LocalPythonExecutor did not return a tuple of (audio_array, sample_rate) as its main output."
+                    "Code executed with LocalPythonExecutor did not return a numpy.ndarray as its main output."
                     f" Got: {type(code_output)}, Value: {code_output!r}"
                 )
 
-            audio_data, sample_rate = code_output
-
-            if not isinstance(audio_data, np.ndarray):
-                raise CodeExecutionError(
-                    f"Returned audio_data is not a NumPy array. Got: {type(audio_data)}"
-                )
-            if not isinstance(sample_rate, int):
-                raise CodeExecutionError(
-                    f"Returned sample_rate is not an integer. Got: {type(sample_rate)}"
-                )
+            audio_data = code_output
+            sample_rate = settings.DEFAULT_SR  # Use global default sample rate
 
             logger.info(
-                f"Code executed via LocalPythonExecutor. Returned audio data shape: {audio_data.shape}, sample rate: {sample_rate}."
+                f"Code executed via LocalPythonExecutor. Returned audio data shape: {audio_data.shape}. "
+                f"Using default sample rate: {sample_rate} Hz."
             )
 
             # Save the returned audio data to the WAV file
@@ -419,23 +415,26 @@ if __name__ == "__main__":
         settings = DummySettings()  # type: ignore
         settings.DEFAULT_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Test code for LocalPythonExecutor: must return (array, sr)
+    # Test code for LocalPythonExecutor: must return np.ndarray
     sample_code_local_executor = """
 import numpy as np
-# soundfile is not needed by the *executed* code if it returns array
+from phonosyne import settings # Allow access to settings.DEFAULT_SR if needed by script logic
 
-sr = 44100
-duration = 1.0
+# sr = 44100 # No longer set sr here, it's handled by exec_env
+duration = 1.0 # Example, can be overridden by send_variables
 frequency = 440.0
 amplitude = 0.5
 
-t = np.linspace(0, duration, int(sr * duration), endpoint=False)
+# Use settings.DEFAULT_SR if the script logic needs to know the sample rate
+# For example, for generating time arrays or frequency-dependent calculations.
+# However, the script itself does not *return* the sample rate.
+t = np.linspace(0, duration, int(settings.DEFAULT_SR * duration), endpoint=False)
 wave = amplitude * np.sin(2 * np.pi * frequency * t)
-# Crucially, return the array and sample rate
-(wave, sr)
+# Crucially, return only the numpy array
+wave
 """
     # Note: The last expression is returned by LocalPythonExecutor.
-    # So, `(wave, sr)` as the last line works. `return (wave, sr)` would also work if inside a function.
+    # So, `wave` as the last line works. `return wave` would also work if inside a function.
 
     test_output_filename_local = "test_sine_local_executor.wav"
     try:

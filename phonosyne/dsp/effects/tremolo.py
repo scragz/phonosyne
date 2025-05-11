@@ -9,7 +9,7 @@ def apply_tremolo(
     depth: float = 0.8,
     lfo_shape: str = "sine",  # 'sine', 'triangle', 'square'
     stereo_phase_deg: float = 0.0,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies a tremolo effect (amplitude modulation) to audio data.
 
@@ -21,25 +21,22 @@ def apply_tremolo(
         stereo_phase_deg: LFO phase difference between L/R channels in degrees (0-180) for stereo panning tremolo.
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array).
     """
     if not 0.0 <= depth <= 1.0:
         raise ValueError("Depth must be between 0.0 and 1.0.")
     if not 0.0 <= stereo_phase_deg <= 180.0:
         raise ValueError("Stereo phase must be between 0.0 and 180.0 degrees.")
 
+    current_sample_rate = settings.DEFAULT_SR
+
     num_samples = audio_data.shape[0]
-    t = np.arange(num_samples) / settings.DEFAULT_SR
+    t = np.arange(num_samples) / current_sample_rate
 
     # Generate LFO
     if lfo_shape == "sine":
         lfo = (np.sin(2 * np.pi * rate_hz * t) + 1.0) / 2.0  # LFO from 0 to 1
     elif lfo_shape == "triangle":
-        lfo = 2.0 * np.abs((rate_hz * t) - np.floor((rate_hz * t) + 0.5))
-        # Ensure it's 0-1 if it's a symmetric triangle around 0
-        # A simpler triangle LFO: 2 * np.abs(np.arcsin(np.sin(2 * np.pi * rate_hz * t)) / np.pi)
-        # Or: (np.abs(np.mod(rate_hz * t - 0.25, 1) * 4 - 2) -1) # Sawtooth like
-        # Let's use a common triangle: from -1 to 1 then scale
         lfo_base = (
             np.abs(np.mod(2 * rate_hz * t - 0.5, 2) - 1) * 2 - 1
         )  # Triangle -1 to 1
@@ -74,6 +71,7 @@ def apply_tremolo(
             processed_audio[:, 1] *= gain_mod_l
         else:
             phase_offset_rad = np.deg2rad(stereo_phase_deg)
+            # LFO for right channel, t is already correct
             if lfo_shape == "sine":
                 lfo_r = (np.sin(2 * np.pi * rate_hz * t + phase_offset_rad) + 1.0) / 2.0
             elif lfo_shape == "triangle":
@@ -92,6 +90,8 @@ def apply_tremolo(
                 lfo_r = (
                     np.sign(np.sin(2 * np.pi * rate_hz * t + phase_offset_rad)) + 1.0
                 ) / 2.0
+            else:  # Should not happen due to earlier check, but for safety
+                lfo_r = lfo  # Default to same as left if shape somehow invalid here
 
             gain_mod_r = (1.0 - depth) + depth * lfo_r
             processed_audio[:, 0] *= gain_mod_l
@@ -106,4 +106,4 @@ def apply_tremolo(
             np.iinfo(audio_data.dtype).max,
         )
 
-    return processed_audio.astype(audio_data.dtype)
+    return processed_audio.astype(audio_data.dtype)  # Return ndarray

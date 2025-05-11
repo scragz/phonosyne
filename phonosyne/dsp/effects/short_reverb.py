@@ -41,8 +41,9 @@ def apply_short_reverb(
     # This is a highly simplified reverb (more like a multi-tap echo)
     for i, dt in enumerate(delay_times):
         if dt > 0:
-            delayed_component, _ = apply_delay(
-                audio_data, settings.DEFAULT_SR, dt, feedback=feedbacks[i], mix=1.0
+            # Corrected call to apply_delay: removed sample_rate, dt is delay_time_s
+            delayed_component = apply_delay(
+                audio_data, dt, feedback=feedbacks[i], mix=1.0
             )  # full wet for component
             wet_signal += delayed_component * (1.0 / len(delay_times))  # Mix components
 

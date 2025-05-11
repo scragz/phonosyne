@@ -1,6 +1,6 @@
 import numpy as np
 
-from phonosyne import settings  # Added import
+from phonosyne import settings
 
 from .delay import apply_delay
 

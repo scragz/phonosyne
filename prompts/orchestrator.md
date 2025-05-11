@@ -55,7 +55,7 @@ Your workflow should generally follow these steps:
            - c. **Move the File**: Use the `FileMoverTool` with the original `source_path` and the `target_path`. If moving fails, record this as a "failed_file_move" for this sample, but consider the sample generation itself a success up to this point. Break the retry loop for this sample. 2. Record the sample as "success" with its final path. Break the retry loop for this sample. - If `CompilerAgent` returns an error message (indicating failure after its internal retries): 1. Record the error for this attempt. 2. Increment `sample_retry_count`. 3. If `sample_retry_count > 10`, mark this sample as "failed_compilation" with the last error, and break the retry loop (proceed to the next sound in the plan). 4. Otherwise (retries not exhausted), continue to the next iteration of this sample's retry loop (which will start with a fresh Analysis step).
    - c. **Progress Tracking**: After the retry loop for a sample concludes (either by success or by exhausting retries), ensure its final status ("success", "failed_analysis", "failed_compilation", "failed_file_move"), the final path if successful, and any pertinent error messages are meticulously recorded.
 
-4. **Loop to Next Sound**: Repeat step 3 for the next sound stub in the design plan until all 18 sounds have been created successfully.
+4. **Loop to Next Sound**: Repeat step 3 for the next sound stub in the design plan until all 18 sounds have been created successfully. Do not attempt to process all sounds in parallel; each sound must be processed sequentially, one at a time.
 
 5. **Finalization**: After attempting to process all sounds in the plan:
 

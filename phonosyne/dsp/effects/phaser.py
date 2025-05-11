@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, lfilter  # Keep scipy import if used
 
 from phonosyne import settings
 
@@ -31,7 +31,7 @@ def apply_phaser(
     feedback: float = 0.3,
     mix: float = 0.5,
     stereo_spread_deg: float = 30.0,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:  # Changed return type
     """
     Applies a phaser effect to audio data.
     Phasing is created by passing the signal through a series of all-pass filters
@@ -47,7 +47,7 @@ def apply_phaser(
         stereo_spread_deg: LFO phase difference between L/R channels in degrees (0-180).
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array). # Changed
     """
     if not 0.0 <= mix <= 1.0:
         raise ValueError("Mix must be between 0.0 and 1.0.")
@@ -58,16 +58,12 @@ def apply_phaser(
     if not 1 <= stages <= 12:  # Practical limit
         raise ValueError("Stages must be between 1 and 12.")
 
-    num_samples = audio_data.shape[0]
-    t = np.arange(num_samples) / settings.DEFAULT_SR
-    lfo = (np.sin(2 * np.pi * rate_hz * t) + 1.0) / 2.0  # LFO from 0 to 1
+    current_sample_rate = settings.DEFAULT_SR  # Use global sample rate
 
-    # Modulate filter coefficients. All-pass coefficient 'a' is typically between -1 and 1.
-    # (1-d)/sqrt(2) to d/sqrt(2) ? No, this is more complex.
-    # The coefficient 'a' of a 1st order APF: y[n] = a*x[n] + x[n-1] - a*y[n-1]
-    # Or: H(z) = (a + z^-1) / (1 + a*z^-1)
-    # The notch frequency is related to 'a'. Let's vary 'a' sinusoidally.
-    # A common range for 'a' is e.g. 0.1 to 0.7 for audible sweep.
+    num_samples = audio_data.shape[0]
+    t = np.arange(num_samples) / current_sample_rate  # Use current_sample_rate
+    lfo = (np.sin(2 * np.pi * rate_hz * t) + 1.0) / 2.0
+
     min_coeff = 0.1
     max_coeff = 0.7
     modulated_coeffs = min_coeff + lfo * (max_coeff - min_coeff) * depth
@@ -90,7 +86,7 @@ def apply_phaser(
         for i in range(num_samples):
             current_coeff = modulated_coeffs[i]
             for apf in allpass_filters:
-                apf.coefficient = current_coeff  # Update coefficient based on LFO
+                apf.coefficient = current_coeff
 
             input_sample = audio_data[i] + feedback_sample_l * feedback
             filtered_sample = input_sample
@@ -143,4 +139,4 @@ def apply_phaser(
             np.iinfo(audio_data.dtype).max,
         )
 
-    return processed_audio.astype(audio_data.dtype)
+    return processed_audio.astype(audio_data.dtype)  # Return ndarray

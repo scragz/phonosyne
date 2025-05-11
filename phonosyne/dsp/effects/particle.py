@@ -1,12 +1,13 @@
 import numpy as np
 
+from phonosyne import settings  # Added
+
 # Potential future imports:
 # from scipy.signal import lfilter, resample_poly
 
 
 def apply_particle(
     audio_data: np.ndarray,
-    sample_rate: int,
     grain_size_ms: float = 50.0,  # Length of each grain (ms)
     density: float = 10.0,  # Grains per second, or overlap factor
     pitch_shift_semitones: float = 0.0,  # Pitch shift per grain (±12 semitones for an octave)
@@ -24,7 +25,7 @@ def apply_particle(
     lfo_to_grain_pos_depth_pct: float = 0.0,  # LFO modulation depth to grain start position (%) - NOT YET IMPLEMENTED
     stereo_pan_width: float = 0.0,  # Random panning width (0.0 mono, 1.0 full stereo) - NOT YET IMPLEMENTED
     mix: float = 0.5,  # Dry/wet mix (0.0 dry to 1.0 wet)
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:  # Changed return type
     """
     Applies a "Particle" granular synthesis effect, inspired by the Red Panda Particle V2.
     This effect chops live audio into small "grains" and manipulates their pitch,
@@ -33,7 +34,6 @@ def apply_particle(
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
         grain_size_ms: Length of each grain in milliseconds (e.g., 10-500 ms).
         density: Controls how many grains are triggered or overlap.
                  Higher values mean more grains. (e.g., grains per second).
@@ -54,27 +54,31 @@ def apply_particle(
         mix: Wet/dry mix (0.0 dry, 1.0 wet).
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array). # Changed
     """
     # Robustness: If audio_data is a tuple (np.ndarray, int) from a previous effect, unpack it.
     # This handles cases where the output of another effect (audio_array, sample_rate_int)
     # is directly passed as audio_data.
-    if (
-        isinstance(audio_data, tuple)
-        and len(audio_data) == 2
-        and isinstance(audio_data[0], np.ndarray)
-        and isinstance(audio_data[1], int)
-    ):
-        # The audio data is the first element.
-        # The sample rate associated with this specific audio data is the second element.
-        # It's generally safer to use the sample_rate bundled with the data.
-        sample_rate = audio_data[1]
-        audio_data = audio_data[0]
+    # REMOVED - This will be handled by dsp.utils.unpack_audio_input before the first effect,
+    # or subsequent effects will always receive an ndarray.
+    # if (
+    #     isinstance(audio_data, tuple)
+    #     and len(audio_data) == 2
+    #     and isinstance(audio_data[0], np.ndarray)
+    #     and isinstance(audio_data[1], int)
+    # ):
+    #     # The audio data is the first element.
+    #     # The sample rate associated with this specific audio data is the second element.
+    #     # It's generally safer to use the_sample_rate bundled with the data.
+    #     # sample_rate = audio_data[1] # Use settings.DEFAULT_SR
+    #     audio_data = audio_data[0]
+
+    current_sample_rate = settings.DEFAULT_SR  # Use global sample rate
 
     if audio_data.ndim == 0:  # Scalar input
         audio_data = np.array([audio_data])
     if audio_data.size == 0:
-        return audio_data, sample_rate
+        return audio_data  # Return ndarray directly
 
     original_dtype = audio_data.dtype
 
@@ -94,15 +98,19 @@ def apply_particle(
         wet_signal_L = np.zeros(num_samples, dtype=np.float64)
         wet_signal_R = np.zeros(num_samples, dtype=np.float64)
     else:  # Unsupported format (e.g. >2 channels or malformed)
-        return audio_data, sample_rate
+        return audio_data  # Return ndarray directly
 
     # Basic parameter calculations
-    grain_size_samples = max(1, int(grain_size_ms / 1000.0 * sample_rate))
+    grain_size_samples = max(
+        1, int(grain_size_ms / 1000.0 * current_sample_rate)
+    )  # Use current_sample_rate
 
     if density <= 1e-6:  # Avoid division by zero or extremely low densities
         inter_onset_interval_samples = num_samples + 1  # Effectively no grains
     else:
-        inter_onset_interval_samples = int(sample_rate / density)
+        inter_onset_interval_samples = int(
+            current_sample_rate / density
+        )  # Use current_sample_rate
 
     max_pitch_random_semitones = (
         12.0  # Max randomization range (e.g., +/- 1 octave if pct is 100)
@@ -219,9 +227,7 @@ def apply_particle(
     # --- Mix and Finalize ---
     if not is_stereo:
         mixed_output_float = (1.0 - mix) * audio_float + mix * wet_signal
-        mixed_output_float = np.clip(
-            mixed_output_float, -1.0, 1.0
-        )  # Assuming audio is in -1 to 1 range
+        mixed_output_float = np.clip(mixed_output_float, -1.0, 1.0)
         final_audio = mixed_output_float.astype(original_dtype)
     else:
         mixed_L_float = (1.0 - mix) * audio_float_L + mix * wet_signal_L
@@ -232,4 +238,4 @@ def apply_particle(
             original_dtype
         )
 
-    return final_audio, sample_rate
+    return final_audio  # Return ndarray directly

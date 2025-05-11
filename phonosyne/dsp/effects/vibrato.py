@@ -26,15 +26,17 @@ def apply_vibrato(
         stereo_phase_deg: LFO phase difference between L/R channels in degrees (0-180).
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array).
     """
     if depth_ms <= 0:
-        return audio_data  # No effect if depth is zero
+        return audio_data  # No effect if depth is zero, return ndarray
     if not 0.0 <= stereo_phase_deg <= 180.0:
         raise ValueError("Stereo phase must be between 0.0 and 180.0 degrees.")
 
+    current_sample_rate = settings.DEFAULT_SR  # Use global sample rate
+
     # Convert depth from ms to samples
-    depth_samples = depth_ms / 1000.0 * settings.DEFAULT_SR
+    depth_samples = depth_ms / 1000.0 * current_sample_rate  # Use current_sample_rate
     # Average delay needs to be at least the depth to allow full sweep
     average_delay_samples = depth_samples * 1.1  # Add a small margin
     max_delay_samples = int(
@@ -43,7 +45,7 @@ def apply_vibrato(
 
     # LFO generation (sine wave)
     num_samples = audio_data.shape[0]
-    t = np.arange(num_samples) / settings.DEFAULT_SR
+    t = np.arange(num_samples) / current_sample_rate  # Use current_sample_rate
     lfo = np.sin(2 * np.pi * rate_hz * t)
 
     # Modulated delay time in samples
@@ -51,7 +53,8 @@ def apply_vibrato(
     modulated_delay_samples_l = average_delay_samples + lfo * depth_samples
     # Ensure delay is not negative (shouldn't happen with current setup but good check)
     modulated_delay_samples_l = np.maximum(
-        0.001 * settings.DEFAULT_SR, modulated_delay_samples_l
+        0.001 * current_sample_rate,
+        modulated_delay_samples_l,  # Use current_sample_rate
     )
 
     if audio_data.ndim == 0:
@@ -121,7 +124,8 @@ def apply_vibrato(
             lfo_r = np.sin(2 * np.pi * rate_hz * t + phase_offset_rad)
             modulated_delay_samples_r = average_delay_samples + lfo_r * depth_samples
             modulated_delay_samples_r = np.maximum(
-                0.001 * settings.DEFAULT_SR, modulated_delay_samples_r
+                0.001 * current_sample_rate,
+                modulated_delay_samples_r,  # Use current_sample_rate
             )
 
         for i in range(num_samples):

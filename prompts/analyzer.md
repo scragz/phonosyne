@@ -39,7 +39,7 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
 3. **`description` (String - The Synthesis Recipe)**:
    - This is the most critical part of your output. It must be a detailed, natural-language set of instructions that a technically-oriented DSP compiler agent can interpret to generate Python code.
    - Clearly describe the synthesis process. This may include:
-     - **Sound Sources/Layers**: Specify generator types (e.g., "sine wave oscillator," "white noise generator," "granular synthesis using short metallic grains," "FM synthesis with a 2:1 modulator-carrier ratio"). If multiple layers are involved, describe their order or interaction.
+     - **Sound Sources/Layers**: Specify generator types (e.g., "sine wave oscillator," "white noise generator," "granular synthesis using short metallic grains," "FM synthesis with a 2:1 modulator-carrier ratio"). If multiple layers are involved, describe their order or interaction. Limit the number of layers to a maximum of 5.
      - **Pitch & Frequency**: Provide approximate frequencies, musical notes (e.g., "C3," "A440"), or pitch ranges (e.g., "sweeping from a low rumble around 50Hz up to 500Hz").
      - **Envelopes**: Describe amplitude envelopes (e.g., "slow attack of approximately 2 seconds," "sharp percussive decay of 100ms," "ADSR with long release") and any filter or pitch envelopes.
      - **Filters**: Specify filter types (e.g., "resonant low-pass filter," "band-pass filter," "formant filter"), key parameters (e.g., "cutoff frequency at 800Hz," "Q factor of 2.5"), and any modulation (e.g., "cutoff swept by an LFO," "filter cutoff controlled by an envelope").

@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import lfilter
 
-from phonosyne import settings  # Added import
+from phonosyne import settings
 
 
 def apply_rainbow_machine(

@@ -10,7 +10,7 @@ class NoiseGate:
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int,  # This will be settings.DEFAULT_SR
         threshold_db: float = -50.0,
         attack_ms: float = 1.0,
         hold_ms: float = 10.0,
@@ -138,7 +138,7 @@ class NoiseGate:
             # This is NOT how it's usually done. A proper stereo gate has one detector.
             # This is a placeholder for a more correct stereo implementation.
             gate_l = NoiseGate(
-                self.sample_rate,
+                self.sample_rate,  # This is already correct
                 20 * np.log10(self.threshold_lin),
                 self.attack_samples * 1000 / self.sample_rate,
                 self.hold_samples * 1000 / self.sample_rate,
@@ -146,7 +146,7 @@ class NoiseGate:
                 20 * np.log10(self.attenuation_lin),
             )
             gate_r = NoiseGate(
-                self.sample_rate,
+                self.sample_rate,  # This is already correct
                 20 * np.log10(self.threshold_lin),
                 self.attack_samples * 1000 / self.sample_rate,
                 self.hold_samples * 1000 / self.sample_rate,
@@ -166,7 +166,7 @@ def apply_noise_gate(
     hold_ms: float = 10.0,
     release_ms: float = 20.0,
     attenuation_db: float = -96.0,
-) -> np.ndarray:
+) -> np.ndarray:  # Changed return type
     """
     Applies a noise gate effect to audio data.
 
@@ -179,15 +179,15 @@ def apply_noise_gate(
         attenuation_db: Amount of gain reduction when the gate is closed, in dB (e.g., -96dB for near silence).
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array). # Changed
     """
     if audio_data.ndim == 0:
         audio_data = np.array([audio_data])
     if audio_data.size == 0:
-        return audio_data
+        return audio_data  # Return ndarray
 
     gate = NoiseGate(
-        settings.DEFAULT_SR,
+        settings.DEFAULT_SR,  # Use global sample rate
         threshold_db,
         attack_ms,
         hold_ms,
@@ -206,4 +206,4 @@ def apply_noise_gate(
             np.iinfo(original_dtype).max,
         )
 
-    return processed_audio_float.astype(original_dtype)
+    return processed_audio_float.astype(original_dtype)  # Return ndarray

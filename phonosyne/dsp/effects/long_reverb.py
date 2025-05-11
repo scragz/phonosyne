@@ -2,7 +2,7 @@ import numpy as np
 
 from phonosyne import settings
 
-from .delay import apply_delay  # Assuming delay can be a building block
+from .delay import apply_delay
 
 
 def apply_long_reverb(
@@ -10,7 +10,7 @@ def apply_long_reverb(
     decay_time_s: float = 2.0,
     mix: float = 0.4,
     diffusion: float = 0.7,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies a simple long reverb effect.
     This uses multiple delays with feedback, attempting a more spacious sound.
@@ -23,7 +23,7 @@ def apply_long_reverb(
         diffusion: Controls the 'smearing' of reflections (0.0 to 1.0). Higher values mean more diffusion.
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array).
     """
     if not 0.0 <= mix <= 1.0:
         raise ValueError("Mix must be between 0.0 and 1.0.")
@@ -40,8 +40,9 @@ def apply_long_reverb(
         0.0437,
         0.0533,
         0.0677,
-    ]  # Primes scaled down
+    ]
 
+    # No explicit use of sample_rate here, settings.DEFAULT_SR is used by apply_delay internally
     delay_times_s = [
         ratio * decay_time_s * (1 + (np.random.rand() - 0.5) * 0.1 * diffusion)
         for ratio in base_delay_ratios
@@ -49,26 +50,20 @@ def apply_long_reverb(
     feedbacks = [
         0.6 + 0.2 * diffusion + (np.random.rand() - 0.5) * 0.1
         for _ in base_delay_ratios
-    ]  # Add some randomness
+    ]
 
     wet_signal = np.zeros_like(audio_data, dtype=np.float64)
 
-    # Apply multiple delays. This is a simplified approach.
-    # A real reverb would have a more complex network of delays and filters.
     for i, dt_s in enumerate(delay_times_s):
         if dt_s > 0:
-            # Ensure feedback is less than 1 to avoid infinite gain
             current_feedback = min(feedbacks[i], 0.95)
 
-            # Apply some light filtering (e.g., damping high frequencies in feedback) for a more natural reverb tail
-            # This is a placeholder; a proper filter would be more involved.
-            # For now, we'll just use the delay as is.
-            delayed_component, _ = apply_delay(
-                audio_data,
-                settings.DEFAULT_SR,
-                dt_s,
+            # Corrected call to apply_delay
+            delayed_component = apply_delay(
+                audio_data,  # apply_delay expects audio_data as first arg
+                delay_time_s=dt_s,  # Use keyword argument for clarity if apply_delay supports it, or positional
                 feedback=current_feedback,
-                mix=1.0,
+                mix=1.0,  # Assuming mix=1.0 to get full wet signal from delay for reverb component
             )
 
             # Pan the delayed components slightly for stereo width if stereo input
@@ -85,10 +80,8 @@ def apply_long_reverb(
 
     # Normalize the summed wet signal to avoid clipping, then scale by number of taps
     if np.max(np.abs(wet_signal)) > 0:
-        wet_signal /= np.max(np.abs(wet_signal))  # Normalize to [-1, 1]
-    wet_signal *= 1.0 / np.sqrt(
-        len(delay_times_s)
-    )  # Attenuate based on number of taps to manage energy
+        wet_signal /= np.max(np.abs(wet_signal))
+    wet_signal *= 1.0 / np.sqrt(len(delay_times_s))
 
     processed_audio = audio_data * (1 - mix) + wet_signal * mix
 

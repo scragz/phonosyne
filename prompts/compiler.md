@@ -29,13 +29,13 @@ The target sample rate for all generated audio is **48000 Hz**.
 
 1. **`PythonCodeExecutionTool`**:
 
-   - **Purpose**: Safely executes a given string of Python DSP code. The Python code you provide to this tool **must** be written to return a tuple: `(numpy_audio_array, sample_rate_int)`. The `description` and `duration` from the `recipe_json` will be made available to the executed script's global scope.
+   - **Purpose**: Safely executes a given string of Python DSP code. The Python code you provide to this tool **must** be written to return a single `numpy.ndarray` representing the audio data. The `PythonCodeExecutionTool` will automatically use `settings.DEFAULT_SR` (which is 48000 Hz) as the sample rate when saving the WAV file. The `description` and `duration` from the `recipe_json` will be made available to the executed script's global scope.
    - **Input Arguments for this Tool**:
      - `code: str` (The Python DSP script you generate).
      - `output_filename: str` (A unique filename you should create for the temporary WAV, e.g., using `effect_name` and current attempt number like `effect_name_attempt_1.wav`).
      - `recipe_json: str` (The JSON string of the synthesis recipe, conforming to `AnalyzerOutput` schema, which you received as input. This is needed by the tool to extract `description` and `duration` for the execution environment).
    - **Output from this Tool**:
-     - If successful: A string path to the temporary `.wav` file (this file is created by the tool from the numpy array your script returned).
+     - If successful: A string path to the temporary `.wav` file (this file is created by the tool from the numpy array your script returned, using `settings.DEFAULT_SR`).
      - If failed (e.g., script error, wrong return type): An error message string.
 
 2. **`AudioValidationTool`**:
@@ -87,7 +87,7 @@ For each attempt (up to 10):
        - `apply_short_reverb(audio_data: np.ndarray, decay_time_s: float = 0.2, mix: float = 0.3)`
        - `apply_tremolo(audio_data: np.ndarray, rate_hz: float = 5.0, depth: float = 0.8, lfo_shape: str = "sine", stereo_phase_deg: float = 0.0)`
        - `apply_vibrato(audio_data: np.ndarray, rate_hz: float = 6.0, depth_ms: float = 1.0, stereo_phase_deg: float = 0.0)`
-     - **MANDATORY SCRIPT RETURN VALUE**: The Python script's final executable line **MUST** evaluate to a Python tuple: `(audio_data_numpy_array, sample_rate_int)`. For example: `(final_mono_array, 48000)`. This is what the `PythonCodeExecutionTool` expects.
+     - **MANDATORY SCRIPT RETURN VALUE**: The Python script\'s final executable line **MUST** evaluate to a single `numpy.ndarray` representing the mono audio data. For example: `final_mono_array`. The `PythonCodeExecutionTool` will handle using `settings.DEFAULT_SR` when creating the WAV file.
      - **Normalization & Clipping**: Before returning the `audio_data_numpy_array`, ensure its values are strictly within the range `[-1.0, 1.0]`. Implement normalization (e.g., to a target peak like -1.0 dBFS) or clipping if necessary to meet this requirement. This is a common validation failure point.
      - **Duration**: The length of the `audio_data_numpy_array` should correspond to the globally available `duration` and the 48000 Hz sample rate.
      - **Efficiency**: Generate computationally efficient code. The execution environment has operation limits.
@@ -100,7 +100,7 @@ For each attempt (up to 10):
 
 3. **Evaluate Execution Outcome**:
 
-   - If the `PythonCodeExecutionTool` returns an error message string: This indicates your script failed to execute correctly or didn't return the expected `(array, rate)` tuple. Use this error message as `error_feedback` for your next attempt. Go back to Step 1 (Generate Python DSP Code), increment your attempt counter, and try to fix the script.
+   - If the `PythonCodeExecutionTool` returns an error message string: This indicates your script failed to execute correctly or didn't return the expected `numpy.ndarray`. Use this error message as `error_feedback` for your next attempt. Go back to Step 1 (Generate Python DSP Code), increment your attempt counter, and try to fix the script.
    - If the `PythonCodeExecutionTool` returns a file path string: This means your script executed, and a temporary WAV file was created. Proceed to audio validation.
 
 4. **Validate Audio File**:
