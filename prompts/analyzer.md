@@ -43,7 +43,7 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
      - **Pitch & Frequency**: Provide approximate frequencies, musical notes (e.g., "C3," "A440"), or pitch ranges (e.g., "sweeping from a low rumble around 50Hz up to 500Hz").
      - **Envelopes**: Describe amplitude envelopes (e.g., "slow attack of approximately 2 seconds," "sharp percussive decay of 100ms," "ADSR with long release") and any filter or pitch envelopes.
      - **Filters**: Specify filter types (e.g., "resonant low-pass filter," "band-pass filter," "formant filter"), key parameters (e.g., "cutoff frequency at 800Hz," "Q factor of 2.5"), and any modulation (e.g., "cutoff swept by an LFO," "filter cutoff controlled by an envelope").
-     - **Effects**: Detail any audio effects in the chain and their important settings (e.g., "subtle stereo chorus with a rate of 0.5Hz," "ping-pong delay with 300ms delay time and 40% feedback," "large hall reverb with a 3-second decay"). USE LOTS OF EFFECTS! Currently available effects include:
+     - **Effects**: Detail any audio effects in the chain and their important settings (e.g., "subtle stereo chorus with a rate of 0.5Hz," "ping-pong delay with 300ms delay time and 40% feedback," "large hall reverb with a 3-second decay"). USE LOTS OF EFFECTS! You are encouraged to use these creatively, routing them into each other, using them in parallel, sending to them at different times, and otherwise using them in interesting ways. The current effects available are::
        - autowah
        - chorus
        - compressor
