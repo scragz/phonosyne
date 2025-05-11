@@ -85,6 +85,7 @@ For each attempt (up to 10):
        - distortion
        - overdrive
        - fuzz
+       - rainbow_machine: a complex effect that combines elements of pitch shifting, modulation, and filtering to create a rich, evolving sound.
      - **MANDATORY SCRIPT RETURN VALUE**: The Python script's final executable line **MUST** evaluate to a Python tuple: `(audio_data_numpy_array, sample_rate_int)`. For example: `(final_mono_array, 48000)`. This is what the `PythonCodeExecutionTool` expects.
      - **Normalization & Clipping**: Before returning the `audio_data_numpy_array`, ensure its values are strictly within the range `[-1.0, 1.0]`. Implement normalization (e.g., to a target peak like -1.0 dBFS) or clipping if necessary to meet this requirement. This is a common validation failure point.
      - **Duration**: The length of the `audio_data_numpy_array` should correspond to the globally available `duration` and the 48000 Hz sample rate.

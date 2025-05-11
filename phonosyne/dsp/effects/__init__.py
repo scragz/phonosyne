@@ -12,6 +12,7 @@ from .long_reverb import apply_long_reverb
 from .noise_gate import apply_noise_gate
 from .overdrive import apply_overdrive
 from .phaser import apply_phaser
+from .rainbow_machine import apply_rainbow_machine
 from .short_reverb import apply_short_reverb
 from .tremolo import apply_tremolo
 from .vibrato import apply_vibrato
@@ -33,4 +34,5 @@ __all__ = [
     "apply_distortion",
     "apply_overdrive",
     "apply_fuzz",
+    "apply_rainbow_machine",
 ]
