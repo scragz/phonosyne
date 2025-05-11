@@ -43,7 +43,25 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
      - **Pitch & Frequency**: Provide approximate frequencies, musical notes (e.g., "C3," "A440"), or pitch ranges (e.g., "sweeping from a low rumble around 50Hz up to 500Hz").
      - **Envelopes**: Describe amplitude envelopes (e.g., "slow attack of approximately 2 seconds," "sharp percussive decay of 100ms," "ADSR with long release") and any filter or pitch envelopes.
      - **Filters**: Specify filter types (e.g., "resonant low-pass filter," "band-pass filter," "formant filter"), key parameters (e.g., "cutoff frequency at 800Hz," "Q factor of 2.5"), and any modulation (e.g., "cutoff swept by an LFO," "filter cutoff controlled by an envelope").
-     - **Effects**: Detail any audio effects in the chain and their important settings (e.g., "subtle stereo chorus with a rate of 0.5Hz," "ping-pong delay with 300ms delay time and 40% feedback," "large hall reverb with a 3-second decay"). USE LOTS OF EFFECTS!
+     - **Effects**: Detail any audio effects in the chain and their important settings (e.g., "subtle stereo chorus with a rate of 0.5Hz," "ping-pong delay with 300ms delay time and 40% feedback," "large hall reverb with a 3-second decay"). USE LOTS OF EFFECTS! Currently available effects include:
+       - autowah
+       - chorus
+       - compressor
+       - delay
+       - distortion
+       - dub_echo
+       - echo
+       - flanger
+       - fuzz
+       - long_reverb
+       - noise_gate
+       - overdrive
+       - particle
+       - phaser
+       - rainbow_machine
+       - short_reverb
+       - tremolo
+       - vibrato
      - **Modulation**: Describe modulation sources (e.g., "LFO," "random modulator," "envelope follower") and their targets and approximate intensity (e.g., "LFO subtly modulating oscillator pitch," "noise source modulating filter cutoff slightly").
      - **Panning**: Although the final output will be mono, if stereo imaging concepts are integral to the sound's design before a final mono sum (e.g., "sound starts panned left and moves to the right"), describe this.
      - **Mixing**: If multiple layers are present, give an indication of their relative levels or prominence.
