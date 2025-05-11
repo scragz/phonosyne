@@ -1,11 +1,12 @@
 import numpy as np
 
+from phonosyne import settings
+
 from .delay import apply_delay  # Assuming delay can be a building block
 
 
 def apply_long_reverb(
     audio_data: np.ndarray,
-    sample_rate: int,
     decay_time_s: float = 2.0,
     mix: float = 0.4,
     diffusion: float = 0.7,
@@ -17,7 +18,6 @@ def apply_long_reverb(
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
         decay_time_s: Approximate decay time for the reverb.
         mix: Wet/dry mix (0.0 dry to 1.0 wet).
         diffusion: Controls the 'smearing' of reflections (0.0 to 1.0). Higher values mean more diffusion.
@@ -64,7 +64,11 @@ def apply_long_reverb(
             # This is a placeholder; a proper filter would be more involved.
             # For now, we'll just use the delay as is.
             delayed_component, _ = apply_delay(
-                audio_data, sample_rate, dt_s, feedback=current_feedback, mix=1.0
+                audio_data,
+                settings.DEFAULT_SR,
+                dt_s,
+                feedback=current_feedback,
+                mix=1.0,
             )
 
             # Pan the delayed components slightly for stereo width if stereo input
@@ -95,4 +99,4 @@ def apply_long_reverb(
             np.iinfo(audio_data.dtype).max,
         )
 
-    return processed_audio.astype(audio_data.dtype), sample_rate
+    return processed_audio.astype(audio_data.dtype)

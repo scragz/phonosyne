@@ -1,5 +1,7 @@
 import numpy as np
 
+from phonosyne import settings
+
 
 class Compressor:
     """
@@ -8,7 +10,6 @@ class Compressor:
 
     def __init__(
         self,
-        sample_rate: int,
         threshold_db: float = -20.0,
         ratio: float = 4.0,
         attack_ms: float = 5.0,
@@ -16,14 +17,15 @@ class Compressor:
         makeup_gain_db: float = 0.0,
         knee_db: float = 0.0,
     ):
-        self.sample_rate = sample_rate
         self.threshold_lin = 10 ** (threshold_db / 20.0)
         self.ratio = ratio
         self.attack_coeff = (
-            np.exp(-1.0 / (attack_ms / 1000.0 * sample_rate)) if attack_ms > 0 else 0.0
+            np.exp(-1.0 / (attack_ms / 1000.0 * settings.DEFAULT_SR))
+            if attack_ms > 0
+            else 0.0
         )
         self.release_coeff = (
-            np.exp(-1.0 / (release_ms / 1000.0 * sample_rate))
+            np.exp(-1.0 / (release_ms / 1000.0 * settings.DEFAULT_SR))
             if release_ms > 0
             else 0.0
         )
@@ -149,20 +151,18 @@ class Compressor:
 
 def apply_compressor(
     audio_data: np.ndarray,
-    sample_rate: int,
     threshold_db: float = -20.0,
     ratio: float = 4.0,
     attack_ms: float = 5.0,
     release_ms: float = 50.0,
     makeup_gain_db: float = 0.0,
     knee_db: float = 0.0,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies a compressor effect to audio data.
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
         threshold_db: Compressor threshold in dB. Signal levels above this will be compressed.
         ratio: Compression ratio (e.g., 4.0 means 4:1 compression).
         attack_ms: Attack time in milliseconds. How quickly the compressor reacts to signals above the threshold.
@@ -171,15 +171,15 @@ def apply_compressor(
         knee_db: Width of the soft knee in dB. 0 for hard knee.
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array).
     """
     if audio_data.ndim == 0:
         audio_data = np.array([audio_data])  # Handle scalar input
     if audio_data.size == 0:
-        return audio_data, sample_rate  # Handle empty input
+        return audio_data  # Handle empty input
 
     comp = Compressor(
-        sample_rate, threshold_db, ratio, attack_ms, release_ms, makeup_gain_db, knee_db
+        threshold_db, ratio, attack_ms, release_ms, makeup_gain_db, knee_db
     )
     processed_audio = comp.process_block(
         audio_data.astype(np.float64)
@@ -193,4 +193,4 @@ def apply_compressor(
             np.iinfo(audio_data.dtype).max,
         )
 
-    return processed_audio.astype(audio_data.dtype), sample_rate
+    return processed_audio.astype(audio_data.dtype)

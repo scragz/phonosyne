@@ -1,9 +1,10 @@
 import numpy as np
 
+from phonosyne import settings
+
 
 def apply_overdrive(
     audio_data: np.ndarray,
-    sample_rate: int,
     drive: float = 0.5,
     tone: float = 0.5,
     mix: float = 1.0,
@@ -13,7 +14,6 @@ def apply_overdrive(
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
         drive: Amount of overdrive (0.0 to 1.0). Controls the input gain to the tanh function.
         tone: Controls the brightness of the overdriven signal (0.0 dark to 1.0 bright).
               This is a very simple high-shelf filter.
@@ -32,7 +32,7 @@ def apply_overdrive(
     if audio_data.ndim == 0:
         audio_data = np.array([audio_data])
     if audio_data.size == 0:
-        return audio_data, sample_rate
+        return audio_data
 
     original_dtype = audio_data.dtype
     # Work with float64 for processing to maintain precision
@@ -91,4 +91,4 @@ def apply_overdrive(
     else:  # Float output
         processed_audio = np.clip(processed_audio, -1.0, 1.0)
 
-    return processed_audio.astype(original_dtype), sample_rate
+    return processed_audio.astype(original_dtype)

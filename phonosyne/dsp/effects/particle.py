@@ -56,6 +56,21 @@ def apply_particle(
     Returns:
         A tuple containing the processed audio data (NumPy array) and the sample rate (int).
     """
+    # Robustness: If audio_data is a tuple (np.ndarray, int) from a previous effect, unpack it.
+    # This handles cases where the output of another effect (audio_array, sample_rate_int)
+    # is directly passed as audio_data.
+    if (
+        isinstance(audio_data, tuple)
+        and len(audio_data) == 2
+        and isinstance(audio_data[0], np.ndarray)
+        and isinstance(audio_data[1], int)
+    ):
+        # The audio data is the first element.
+        # The sample rate associated with this specific audio data is the second element.
+        # It's generally safer to use the sample_rate bundled with the data.
+        sample_rate = audio_data[1]
+        audio_data = audio_data[0]
+
     if audio_data.ndim == 0:  # Scalar input
         audio_data = np.array([audio_data])
     if audio_data.size == 0:

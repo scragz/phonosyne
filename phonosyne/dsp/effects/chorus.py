@@ -1,22 +1,22 @@
 import numpy as np
 
+from phonosyne import settings
+
 
 def apply_chorus(
     audio_data: np.ndarray,
-    sample_rate: int,
     rate_hz: float = 1.0,
     depth_ms: float = 2.0,
     mix: float = 0.5,
     feedback: float = 0.2,
     stereo_spread_ms: float = 0.5,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies a chorus effect to audio data.
     Chorus is created by mixing the original signal with delayed, pitch-modulated copies.
 
     Args:
         audio_data: NumPy array of the input audio. Assumed to be mono (1D) or stereo (2D, channels last).
-        sample_rate: Sample rate of the audio in Hz.
         rate_hz: Frequency of the LFO modulating the delay time, in Hz.
         depth_ms: Maximum deviation of the delay time from its average, in milliseconds.
         mix: Wet/dry mix (0.0 dry to 1.0 wet).
@@ -25,7 +25,7 @@ def apply_chorus(
                           Only used if input is stereo.
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array).
     """
     if not 0.0 <= mix <= 1.0:
         raise ValueError("Mix must be between 0.0 and 1.0.")
@@ -36,7 +36,7 @@ def apply_chorus(
         depth_ms = 0.001  # Ensure it's not zero for calculations
 
     # Convert depth and spread from ms to samples
-    depth_samples = depth_ms / 1000.0 * sample_rate
+    depth_samples = depth_ms / 1000.0 * settings.DEFAULT_SR
     # Average delay is often around the depth, or slightly more, to avoid very short delays
     average_delay_samples = depth_samples * 1.5
     max_delay_samples = int(
@@ -45,7 +45,7 @@ def apply_chorus(
 
     # LFO generation
     num_samples = audio_data.shape[0]
-    t = np.arange(num_samples) / sample_rate
+    t = np.arange(num_samples) / settings.DEFAULT_SR
     lfo = np.sin(2 * np.pi * rate_hz * t)
 
     # Modulated delay time in samples
@@ -95,7 +95,7 @@ def apply_chorus(
         delay_buffer_r = np.zeros(max_delay_samples, dtype=audio_data.dtype)
 
         # LFO for right channel with phase offset for stereo spread
-        spread_delay_offset_samples = stereo_spread_ms / 1000.0 * sample_rate
+        spread_delay_offset_samples = stereo_spread_ms / 1000.0 * settings.DEFAULT_SR
         lfo_r_phase_offset = (
             (rate_hz * stereo_spread_ms / 1000.0) * 2 * np.pi
         )  # phase = 2*pi*f*t_offset
@@ -142,4 +142,4 @@ def apply_chorus(
             delay_buffer_r = np.roll(delay_buffer_r, 1)
             delay_buffer_r[0] = new_buf_in_r
 
-    return processed_audio, sample_rate
+    return processed_audio

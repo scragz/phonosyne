@@ -1,10 +1,12 @@
 import numpy as np
 from scipy.signal import lfilter
 
+from phonosyne import settings  # Added import
+
 
 def apply_rainbow_machine(
     audio_data: np.ndarray,
-    sample_rate: int,
+    # sample_rate: int, # Removed parameter
     pitch_semitones: float = 0.0,
     primary_level: float = 0.8,
     secondary_mode: float = 0.0,  # -1: full octave down, 0: off, +1: full octave up
@@ -16,7 +18,7 @@ def apply_rainbow_machine(
     mod_rate_hz: float = 0.5,
     mod_depth_ms: float = 5.0,
     mix: float = 0.5,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:  # Changed return type
     """
     Applies a "Rainbow Machine" type effect with iterative "Magic" feedback.
     This includes pitch shifting, delay, modulation, tone control, and a
@@ -25,7 +27,7 @@ def apply_rainbow_machine(
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
+        # sample_rate: Sample rate of the audio in Hz. # Removed from docstring
         pitch_semitones: Primary pitch shift in semitones (-4.0 to +3.0).
         primary_level: Level of the primary pitch-shifted signal (0.0 to 1.0).
         secondary_mode: Controls secondary octave (-1.0 octave down, 0.0 off, +1.0 octave up).
@@ -42,7 +44,7 @@ def apply_rainbow_machine(
         mix: Wet/dry mix (0.0 dry to 1.0 wet).
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array). # Changed return type in docstring
 
     Note:
         The "Magic" feedback loop can be computationally intensive, especially with
@@ -54,7 +56,7 @@ def apply_rainbow_machine(
     if audio_data.ndim == 0:  # Scalar input
         audio_data = np.array([audio_data])
     if audio_data.size == 0:
-        return audio_data, sample_rate
+        return audio_data  # Changed return
 
     original_dtype = audio_data.dtype
     audio_float = audio_data.astype(np.float64)
@@ -71,19 +73,25 @@ def apply_rainbow_machine(
         secondary_pitch_ratio = 0.5  # Octave down
 
     tracking_samples = int(
-        np.clip(tracking_ms, 0, 1000) / 1000.0 * sample_rate
+        np.clip(tracking_ms, 0, 1000)
+        / 1000.0
+        * settings.DEFAULT_SR  # Used settings.DEFAULT_SR
     )  # Increased max tracking
     tone_rolloff = np.clip(tone_rolloff, 0.0, 1.0)
 
     magic_feedback = np.clip(magic_feedback, 0.0, 0.98)  # Clipping for stability
     magic_feedback_delay_samples = int(
-        np.clip(magic_feedback_delay_ms, 1, 2000) / 1000.0 * sample_rate
+        np.clip(magic_feedback_delay_ms, 1, 2000)
+        / 1000.0
+        * settings.DEFAULT_SR  # Used settings.DEFAULT_SR
     )  # Min 1ms
     magic_iterations = max(1, int(magic_iterations))  # At least one pass
 
     mod_rate_hz = np.clip(mod_rate_hz, 0.05, 20.0)  # Increased max mod rate
     mod_depth_samples = int(
-        np.clip(mod_depth_ms, 0, 30) / 1000.0 * sample_rate
+        np.clip(mod_depth_ms, 0, 30)
+        / 1000.0
+        * settings.DEFAULT_SR  # Used settings.DEFAULT_SR
     )  # Increased max mod depth
     mix = np.clip(mix, 0.0, 1.0)
 
@@ -152,7 +160,7 @@ def apply_rainbow_machine(
 
         # 4. Modulation (Chorus/Flange)
         if mod_depth_samples > 0 and mod_rate_hz > 0 and tracked_signal.size > 0:
-            t = np.arange(num_samples) / sample_rate
+            t = np.arange(num_samples) / settings.DEFAULT_SR  # Used settings.DEFAULT_SR
             # LFO signal: a sine wave for delay modulation
             lfo_modulation = mod_depth_samples * np.sin(2 * np.pi * mod_rate_hz * t)
 
@@ -264,4 +272,4 @@ def apply_rainbow_machine(
         #    output_audio = output_audio * (target_peak / max_abs)
         pass  # Decided against auto-normalizing to -1dBFS if not clipping. Let mix handle levels.
 
-    return output_audio.astype(original_dtype), sample_rate
+    return output_audio.astype(original_dtype)  # Changed return

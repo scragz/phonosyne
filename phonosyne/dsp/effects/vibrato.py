@@ -1,5 +1,7 @@
 import numpy as np
 
+from phonosyne import settings
+
 # Note: A true pitch-shifting vibrato is more complex, often involving
 # granular synthesis or phase vocoder techniques for high quality.
 # This implementation will use a modulated delay line, which creates a Doppler effect
@@ -8,18 +10,16 @@ import numpy as np
 
 def apply_vibrato(
     audio_data: np.ndarray,
-    sample_rate: int,
     rate_hz: float = 6.0,
     depth_ms: float = 1.0,  # Depth of delay modulation in milliseconds
     stereo_phase_deg: float = 0.0,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies a vibrato effect to audio data using modulated delay lines.
     This creates pitch modulation via the Doppler effect.
 
     Args:
         audio_data: NumPy array of the input audio. Assumed to be mono (1D) or stereo (2D, channels last).
-        sample_rate: Sample rate of the audio in Hz.
         rate_hz: Frequency of the LFO modulating the delay time, in Hz.
         depth_ms: Maximum deviation of the delay time from its average, in milliseconds.
                   This controls the intensity of the pitch shift.
@@ -29,12 +29,12 @@ def apply_vibrato(
         A tuple containing the processed audio data (NumPy array) and the sample rate (int).
     """
     if depth_ms <= 0:
-        return audio_data, sample_rate  # No effect if depth is zero
+        return audio_data  # No effect if depth is zero
     if not 0.0 <= stereo_phase_deg <= 180.0:
         raise ValueError("Stereo phase must be between 0.0 and 180.0 degrees.")
 
     # Convert depth from ms to samples
-    depth_samples = depth_ms / 1000.0 * sample_rate
+    depth_samples = depth_ms / 1000.0 * settings.DEFAULT_SR
     # Average delay needs to be at least the depth to allow full sweep
     average_delay_samples = depth_samples * 1.1  # Add a small margin
     max_delay_samples = int(
@@ -43,7 +43,7 @@ def apply_vibrato(
 
     # LFO generation (sine wave)
     num_samples = audio_data.shape[0]
-    t = np.arange(num_samples) / sample_rate
+    t = np.arange(num_samples) / settings.DEFAULT_SR
     lfo = np.sin(2 * np.pi * rate_hz * t)
 
     # Modulated delay time in samples
@@ -51,7 +51,7 @@ def apply_vibrato(
     modulated_delay_samples_l = average_delay_samples + lfo * depth_samples
     # Ensure delay is not negative (shouldn't happen with current setup but good check)
     modulated_delay_samples_l = np.maximum(
-        0.001 * sample_rate, modulated_delay_samples_l
+        0.001 * settings.DEFAULT_SR, modulated_delay_samples_l
     )
 
     if audio_data.ndim == 0:
@@ -121,7 +121,7 @@ def apply_vibrato(
             lfo_r = np.sin(2 * np.pi * rate_hz * t + phase_offset_rad)
             modulated_delay_samples_r = average_delay_samples + lfo_r * depth_samples
             modulated_delay_samples_r = np.maximum(
-                0.001 * sample_rate, modulated_delay_samples_r
+                0.001 * settings.DEFAULT_SR, modulated_delay_samples_r
             )
 
         for i in range(num_samples):
@@ -166,4 +166,4 @@ def apply_vibrato(
             processed_audio, np.iinfo(original_dtype).min, np.iinfo(original_dtype).max
         )
 
-    return processed_audio.astype(original_dtype), sample_rate
+    return processed_audio.astype(original_dtype)

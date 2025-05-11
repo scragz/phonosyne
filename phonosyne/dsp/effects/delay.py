@@ -1,32 +1,32 @@
 import numpy as np
 
+from phonosyne import settings
+
 
 def apply_delay(
     audio_data: np.ndarray,
-    sample_rate: int,
     delay_time_s: float,
     feedback: float = 0.3,
     mix: float = 0.5,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies a delay effect to audio data.
 
     Args:
         audio_data: NumPy array of the input audio. Assumed to be mono (1D) or stereo (2D, channels last).
-        sample_rate: Sample rate of the audio in Hz.
         delay_time_s: Delay time in seconds.
         feedback: Feedback gain (0.0 to <1.0).
         mix: Wet/dry mix (0.0 dry to 1.0 wet).
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array).
     """
     if not 0.0 <= feedback < 1.0:
         raise ValueError("Feedback must be between 0.0 and just under 1.0.")
     if not 0.0 <= mix <= 1.0:
         raise ValueError("Mix must be between 0.0 and 1.0.")
 
-    delay_samples = int(delay_time_s * sample_rate)
+    delay_samples = int(delay_time_s * settings.DEFAULT_SR)
 
     # Ensure audio_data is at least 1D
     if audio_data.ndim == 0:
@@ -36,9 +36,7 @@ def apply_delay(
 
     if delay_samples <= 0:
         # No delay, return mixed original signal (effectively just scaling if mix < 1)
-        return (audio_data * (1 - mix) + processed_audio * mix).astype(
-            audio_data.dtype
-        ), sample_rate
+        return (audio_data * (1 - mix) + processed_audio * mix).astype(audio_data.dtype)
 
     if audio_data.ndim == 1:  # Mono
         delay_buffer = np.zeros(delay_samples, dtype=audio_data.dtype)
@@ -69,4 +67,4 @@ def apply_delay(
     else:
         raise ValueError("Audio data must be 1D (mono) or 2D (stereo, channels last).")
 
-    return processed_audio, sample_rate
+    return processed_audio

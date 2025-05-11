@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.signal import butter, lfilter
 
+from phonosyne import settings
+
 
 class AllPassFilter:
     """Simple first-order all-pass filter."""
@@ -23,7 +25,6 @@ class AllPassFilter:
 
 def apply_phaser(
     audio_data: np.ndarray,
-    sample_rate: int,
     rate_hz: float = 0.5,
     depth: float = 0.8,  # Normalized depth of LFO (0 to 1)
     stages: int = 4,  # Number of all-pass filter stages
@@ -38,7 +39,6 @@ def apply_phaser(
 
     Args:
         audio_data: NumPy array of the input audio. Assumed to be mono (1D) or stereo (2D, channels last).
-        sample_rate: Sample rate of the audio in Hz.
         rate_hz: Frequency of the LFO modulating the filter coefficients, in Hz.
         depth: Depth of the LFO modulation (0.0 to 1.0). Controls sweep range.
         stages: Number of all-pass filter stages. More stages = more notches.
@@ -59,7 +59,7 @@ def apply_phaser(
         raise ValueError("Stages must be between 1 and 12.")
 
     num_samples = audio_data.shape[0]
-    t = np.arange(num_samples) / sample_rate
+    t = np.arange(num_samples) / settings.DEFAULT_SR
     lfo = (np.sin(2 * np.pi * rate_hz * t) + 1.0) / 2.0  # LFO from 0 to 1
 
     # Modulate filter coefficients. All-pass coefficient 'a' is typically between -1 and 1.
@@ -143,4 +143,4 @@ def apply_phaser(
             np.iinfo(audio_data.dtype).max,
         )
 
-    return processed_audio.astype(audio_data.dtype), sample_rate
+    return processed_audio.astype(audio_data.dtype)

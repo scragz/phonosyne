@@ -1,5 +1,7 @@
 import numpy as np
 
+from phonosyne import settings
+
 
 class NoiseGate:
     """
@@ -159,19 +161,17 @@ class NoiseGate:
 
 def apply_noise_gate(
     audio_data: np.ndarray,
-    sample_rate: int,
     threshold_db: float = -50.0,
     attack_ms: float = 1.0,
     hold_ms: float = 10.0,
     release_ms: float = 20.0,
     attenuation_db: float = -96.0,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies a noise gate effect to audio data.
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
         threshold_db: Gate threshold in dB. Signals below this (after hold) will be attenuated.
         attack_ms: Attack time in milliseconds. How quickly the gate opens.
         hold_ms: Hold time in milliseconds. How long the gate stays open after signal drops below threshold.
@@ -184,10 +184,15 @@ def apply_noise_gate(
     if audio_data.ndim == 0:
         audio_data = np.array([audio_data])
     if audio_data.size == 0:
-        return audio_data, sample_rate
+        return audio_data
 
     gate = NoiseGate(
-        sample_rate, threshold_db, attack_ms, hold_ms, release_ms, attenuation_db
+        settings.DEFAULT_SR,
+        threshold_db,
+        attack_ms,
+        hold_ms,
+        release_ms,
+        attenuation_db,
     )
 
     # Process with float64 for internal calculations
@@ -201,4 +206,4 @@ def apply_noise_gate(
             np.iinfo(original_dtype).max,
         )
 
-    return processed_audio_float.astype(original_dtype), sample_rate
+    return processed_audio_float.astype(original_dtype)

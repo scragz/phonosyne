@@ -1,5 +1,7 @@
 import numpy as np
 
+from phonosyne import settings  # Added import
+
 from .delay import apply_delay
 
 
@@ -39,12 +41,11 @@ def _simple_lowpass_filter(
 
 def apply_dub_echo(
     audio_data: np.ndarray,
-    sample_rate: int,
     echo_time_s: float = 0.7,
     feedback: float = 0.65,
     mix: float = 0.6,
     damping_factor: float = 0.3,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:  # Changed return type
     """
     Applies a dub-style echo effect.
     Characterized by significant feedback and often a damping of high frequencies in the echoes.
@@ -53,7 +54,6 @@ def apply_dub_echo(
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
         echo_time_s: Time for each echo repetition in seconds.
         feedback: Feedback gain (0.0 to <1.0).
         mix: Wet/dry mix (0.0 dry to 1.0 wet).
@@ -61,14 +61,15 @@ def apply_dub_echo(
                         This is a conceptual parameter for this simplified version.
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array). # Changed return type in docstring
     """
     if not 0.0 <= damping_factor <= 1.0:
         raise ValueError("Damping factor must be between 0.0 and 1.0.")
 
     # Get the full wet signal from the delay
-    wet_signal, sr = apply_delay(
-        audio_data, sample_rate, delay_time_s=echo_time_s, feedback=feedback, mix=1.0
+    # apply_delay will now use settings.DEFAULT_SR internally and return only the array
+    wet_signal = apply_delay(  # Removed sample_rate, updated return handling
+        audio_data, delay_time_s=echo_time_s, feedback=feedback, mix=1.0
     )
 
     # Simulate damping - this is a very crude way.
@@ -106,4 +107,4 @@ def apply_dub_echo(
             np.iinfo(audio_data.dtype).max,
         )
 
-    return processed_audio.astype(audio_data.dtype), sample_rate
+    return processed_audio.astype(audio_data.dtype)  # Changed return

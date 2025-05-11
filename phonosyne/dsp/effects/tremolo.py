@@ -1,9 +1,10 @@
 import numpy as np
 
+from phonosyne import settings
+
 
 def apply_tremolo(
     audio_data: np.ndarray,
-    sample_rate: int,
     rate_hz: float = 5.0,
     depth: float = 0.8,
     lfo_shape: str = "sine",  # 'sine', 'triangle', 'square'
@@ -14,7 +15,6 @@ def apply_tremolo(
 
     Args:
         audio_data: NumPy array of the input audio. Assumed to be mono (1D) or stereo (2D, channels last).
-        sample_rate: Sample rate of the audio in Hz.
         rate_hz: Frequency of the LFO modulating the amplitude, in Hz.
         depth: Depth of the modulation (0.0 to 1.0). 1.0 means amplitude goes to 0.
         lfo_shape: Shape of the LFO ('sine', 'triangle', 'square').
@@ -29,7 +29,7 @@ def apply_tremolo(
         raise ValueError("Stereo phase must be between 0.0 and 180.0 degrees.")
 
     num_samples = audio_data.shape[0]
-    t = np.arange(num_samples) / sample_rate
+    t = np.arange(num_samples) / settings.DEFAULT_SR
 
     # Generate LFO
     if lfo_shape == "sine":
@@ -106,4 +106,4 @@ def apply_tremolo(
             np.iinfo(audio_data.dtype).max,
         )
 
-    return processed_audio.astype(audio_data.dtype), sample_rate
+    return processed_audio.astype(audio_data.dtype)

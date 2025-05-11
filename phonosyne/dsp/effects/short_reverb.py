@@ -1,14 +1,15 @@
 import numpy as np
 
+from phonosyne import settings
+
 from .delay import apply_delay  # Assuming delay can be a building block
 
 
 def apply_short_reverb(
     audio_data: np.ndarray,
-    sample_rate: int,
     decay_time_s: float = 0.2,
     mix: float = 0.3,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies a simple short reverb effect.
     This is a very basic implementation, often using multiple short delays (comb filters) and all-pass filters.
@@ -16,7 +17,6 @@ def apply_short_reverb(
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
         decay_time_s: Approximate decay time for the reverb.
         mix: Wet/dry mix (0.0 dry to 1.0 wet).
 
@@ -42,7 +42,7 @@ def apply_short_reverb(
     for i, dt in enumerate(delay_times):
         if dt > 0:
             delayed_component, _ = apply_delay(
-                audio_data, sample_rate, dt, feedback=feedbacks[i], mix=1.0
+                audio_data, settings.DEFAULT_SR, dt, feedback=feedbacks[i], mix=1.0
             )  # full wet for component
             wet_signal += delayed_component * (1.0 / len(delay_times))  # Mix components
 
@@ -60,4 +60,4 @@ def apply_short_reverb(
             np.iinfo(audio_data.dtype).max,
         )
 
-    return processed_audio.astype(audio_data.dtype), sample_rate
+    return processed_audio.astype(audio_data.dtype)

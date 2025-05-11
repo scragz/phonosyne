@@ -1,13 +1,19 @@
 import numpy as np
 from scipy.signal import butter, hilbert, lfilter
 
+from phonosyne import settings
+
 
 class EnvelopeFollower:
     """Simple envelope follower."""
 
-    def __init__(self, sample_rate: int, attack_ms: float, release_ms: float):
-        self.attack_coeff = np.exp(-1.0 / (max(1, attack_ms / 1000.0 * sample_rate)))
-        self.release_coeff = np.exp(-1.0 / (max(1, release_ms / 1000.0 * sample_rate)))
+    def __init__(self, attack_ms: float, release_ms: float):
+        self.attack_coeff = np.exp(
+            -1.0 / (max(1, attack_ms / 1000.0 * settings.DEFAULT_SR))
+        )
+        self.release_coeff = np.exp(
+            -1.0 / (max(1, release_ms / 1000.0 * settings.DEFAULT_SR))
+        )
         self._envelope = 0.0
 
     def process(self, sample_abs: float) -> float:
@@ -27,10 +33,8 @@ class EnvelopeFollower:
 class BandpassFilter:
     """Simple bandpass filter (Butterworth)."""
 
-    def __init__(
-        self, sample_rate: int, lowcut_hz: float, highcut_hz: float, order: int = 2
-    ):
-        self.nyquist = 0.5 * sample_rate
+    def __init__(self, lowcut_hz: float, highcut_hz: float, order: int = 2):
+        self.nyquist = 0.5 * settings.DEFAULT_SR
         self.low = lowcut_hz / self.nyquist
         self.high = highcut_hz / self.nyquist
         if self.low >= self.high:
@@ -53,10 +57,8 @@ class BandpassFilter:
         out_sample, self._z = lfilter(self.b, self.a, [sample], zi=self._z)
         return out_sample[0]
 
-    def update_coeffs(
-        self, sample_rate: int, lowcut_hz: float, highcut_hz: float, order: int = 2
-    ):
-        self.nyquist = 0.5 * sample_rate
+    def update_coeffs(self, lowcut_hz: float, highcut_hz: float, order: int = 2):
+        self.nyquist = 0.5 * settings.DEFAULT_SR
         self.low = lowcut_hz / self.nyquist
         self.high = highcut_hz / self.nyquist
         if self.low >= self.high:
@@ -76,7 +78,6 @@ class BandpassFilter:
 
 def apply_autowah(
     audio_data: np.ndarray,
-    sample_rate: int,
     mix: float = 0.7,
     sensitivity: float = 0.8,  # How much envelope affects filter cutoff (0-1)
     attack_ms: float = 10.0,
@@ -86,13 +87,12 @@ def apply_autowah(
     q_factor: float = 2.0,  # Q of the bandpass filter
     lfo_rate_hz: float = 0.0,  # Optional LFO to add to envelope follower
     lfo_depth: float = 0.0,  # Depth of optional LFO (0-1)
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies an autowah (envelope-controlled filter) effect to audio data.
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
         mix: Wet/dry mix (0.0 dry to 1.0 wet).
         sensitivity: Controls how much the input signal's envelope affects the filter cutoff.
         attack_ms: Attack time for the envelope follower.
@@ -104,7 +104,7 @@ def apply_autowah(
         lfo_depth: Depth of the optional LFO modulation.
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array).
     """
     if not 0.0 <= mix <= 1.0:
         raise ValueError("Mix must be between 0.0 and 1.0.")
@@ -116,13 +116,13 @@ def apply_autowah(
     if audio_data.ndim == 0:
         audio_data = np.array([audio_data])
     if audio_data.size == 0:
-        return audio_data, sample_rate
+        return audio_data
 
     original_dtype = audio_data.dtype
     audio_float = audio_data.astype(np.float64)
     processed_audio = np.zeros_like(audio_float)
 
-    env_follower = EnvelopeFollower(sample_rate, attack_ms, release_ms)
+    env_follower = EnvelopeFollower(attack_ms, release_ms)
     # Initial filter setup - will be updated each sample
     # For a bandpass, Q relates to bandwidth: BW = Fc/Q. We need lowcut and highcut.
     # Let Fc be the center frequency. lowcut = Fc - BW/2, highcut = Fc + BW/2
@@ -130,14 +130,13 @@ def apply_autowah(
     initial_center_freq = base_freq_hz + sweep_range_hz * 0.1  # A starting point
     initial_bw = initial_center_freq / q_factor
     bp_filter = BandpassFilter(
-        sample_rate,
         initial_center_freq - initial_bw / 2,
         initial_center_freq + initial_bw / 2,
         order=2,
     )
 
     num_samples = audio_float.shape[0]
-    t = np.arange(num_samples) / sample_rate
+    t = np.arange(num_samples) / settings.DEFAULT_SR
     lfo_signal = (
         np.sin(2 * np.pi * lfo_rate_hz * t) * lfo_depth
         if lfo_rate_hz > 0
@@ -158,7 +157,7 @@ def apply_autowah(
 
             center_freq = base_freq_hz + mod_source * sweep_range_hz
             center_freq = np.clip(
-                center_freq, 20.0, sample_rate / 2.0 - 50.0
+                center_freq, 20.0, settings.DEFAULT_SR / 2.0 - 50.0
             )  # Ensure valid range
 
             bandwidth = center_freq / q_factor
@@ -167,25 +166,23 @@ def apply_autowah(
             lowcut = center_freq - bandwidth / 2.0
             highcut = center_freq + bandwidth / 2.0
 
-            lowcut = np.clip(lowcut, 20.0, sample_rate / 2.0 - 20.0)
-            highcut = np.clip(highcut, lowcut + 10.0, sample_rate / 2.0 - 10.0)
+            lowcut = np.clip(lowcut, 20.0, settings.DEFAULT_SR / 2.0 - 20.0)
+            highcut = np.clip(highcut, lowcut + 10.0, settings.DEFAULT_SR / 2.0 - 10.0)
 
-            bp_filter.update_coeffs(sample_rate, lowcut, highcut)
+            bp_filter.update_coeffs(lowcut, highcut)
             processed_audio[i] = bp_filter.process(audio_float[i])
     elif audio_float.ndim == 2:
         # For stereo, typically use a single envelope from combined L/R, or independent.
         # Here, let's use a combined envelope for simplicity and linked wah effect.
         # Or, could create two EnvelopeFollower and BandpassFilter instances for true stereo.
         # This is a simplified stereo: one envelope, two filters (could be one if coeffs are same).
-        env_follower_stereo = EnvelopeFollower(sample_rate, attack_ms, release_ms)
+        env_follower_stereo = EnvelopeFollower(attack_ms, release_ms)
         bp_filter_l = BandpassFilter(
-            sample_rate,
             initial_center_freq - initial_bw / 2,
             initial_center_freq + initial_bw / 2,
             order=2,
         )
         bp_filter_r = BandpassFilter(
-            sample_rate,
             initial_center_freq - initial_bw / 2,
             initial_center_freq + initial_bw / 2,
             order=2,
@@ -202,19 +199,17 @@ def apply_autowah(
             mod_source = np.clip(mod_source, 0.0, 1.0)
 
             center_freq = base_freq_hz + mod_source * sweep_range_hz
-            center_freq = np.clip(center_freq, 20.0, sample_rate / 2.0 - 50.0)
+            center_freq = np.clip(center_freq, 20.0, settings.DEFAULT_SR / 2.0 - 50.0)
             bandwidth = center_freq / q_factor
             bandwidth = max(bandwidth, 10.0)
 
             lowcut = center_freq - bandwidth / 2.0
             highcut = center_freq + bandwidth / 2.0
-            lowcut = np.clip(lowcut, 20.0, sample_rate / 2.0 - 20.0)
-            highcut = np.clip(highcut, lowcut + 10.0, sample_rate / 2.0 - 10.0)
+            lowcut = np.clip(lowcut, 20.0, settings.DEFAULT_SR / 2.0 - 20.0)
+            highcut = np.clip(highcut, lowcut + 10.0, settings.DEFAULT_SR / 2.0 - 10.0)
 
-            bp_filter_l.update_coeffs(sample_rate, lowcut, highcut)
-            bp_filter_r.update_coeffs(
-                sample_rate, lowcut, highcut
-            )  # Same coeffs for L/R for now
+            bp_filter_l.update_coeffs(lowcut, highcut)
+            bp_filter_r.update_coeffs(lowcut, highcut)  # Same coeffs for L/R for now
 
             processed_audio[i, 0] = bp_filter_l.process(audio_float[i, 0])
             processed_audio[i, 1] = bp_filter_r.process(audio_float[i, 1])
@@ -229,4 +224,4 @@ def apply_autowah(
             mixed_audio, np.iinfo(original_dtype).min, np.iinfo(original_dtype).max
         )
 
-    return mixed_audio.astype(original_dtype), sample_rate
+    return mixed_audio.astype(original_dtype)

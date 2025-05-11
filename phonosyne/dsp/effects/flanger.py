@@ -1,15 +1,16 @@
 import numpy as np
 
+from phonosyne import settings
+
 
 def apply_flanger(
     audio_data: np.ndarray,
-    sample_rate: int,
     rate_hz: float = 0.2,
     depth_ms: float = 1.5,  # Flangers use shorter delays than chorus
     mix: float = 0.5,
     feedback: float = 0.7,  # Flangers often have higher feedback
     stereo_spread_ms: float = 0.2,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """
     Applies a flanger effect to audio data.
     Flanging is created by mixing the signal with a slightly delayed copy, where the delay time is modulated by an LFO.
@@ -17,7 +18,6 @@ def apply_flanger(
 
     Args:
         audio_data: NumPy array of the input audio. Assumed to be mono (1D) or stereo (2D, channels last).
-        sample_rate: Sample rate of the audio in Hz.
         rate_hz: Frequency of the LFO modulating the delay time, in Hz.
         depth_ms: Maximum deviation of the delay time from its average, in milliseconds.
                   Typical flanger delays are 0.5ms to 5ms.
@@ -26,7 +26,7 @@ def apply_flanger(
         stereo_spread_ms: Additional LFO phase offset for stereo channels.
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array).
     """
     if not 0.0 <= mix <= 1.0:
         raise ValueError("Mix must be between 0.0 and 1.0.")
@@ -40,12 +40,12 @@ def apply_flanger(
         )
 
     # Convert depth from ms to samples. For flanger, the base delay is very short.
-    depth_samples = depth_ms / 1000.0 * sample_rate
+    depth_samples = depth_ms / 1000.0 * settings.DEFAULT_SR
     # Average delay for flanger is often centered around a very small value, or even such that min delay is near zero.
     # Let's set average_delay_samples such that the delay line sweeps from ~0.1ms up to (0.1ms + 2*depth_ms)
     min_practical_delay_ms = 0.1
     average_delay_samples = (
-        min_practical_delay_ms / 1000.0 * sample_rate
+        min_practical_delay_ms / 1000.0 * settings.DEFAULT_SR
     ) + depth_samples
     max_delay_samples = int(
         average_delay_samples + depth_samples + 2
@@ -53,7 +53,7 @@ def apply_flanger(
 
     # LFO generation
     num_samples = audio_data.shape[0]
-    t = np.arange(num_samples) / sample_rate
+    t = np.arange(num_samples) / settings.DEFAULT_SR
     lfo = np.sin(2 * np.pi * rate_hz * t)  # Sine LFO
     # lfo = (np.abs(np.sin(2 * np.pi * rate_hz * t / 2)) * 2 - 1) # Triangle LFO (approx)
 
@@ -61,7 +61,9 @@ def apply_flanger(
     # Delay varies from (average_delay - depth) to (average_delay + depth)
     modulated_delay_samples = average_delay_samples + lfo * depth_samples
     # Ensure delay is not negative (shouldn't happen with current setup but good check)
-    modulated_delay_samples = np.maximum(0.001 * sample_rate, modulated_delay_samples)
+    modulated_delay_samples = np.maximum(
+        0.001 * settings.DEFAULT_SR, modulated_delay_samples
+    )
 
     if audio_data.ndim == 0:
         audio_data = np.array([audio_data])
@@ -109,7 +111,7 @@ def apply_flanger(
         lfo_r = np.sin(2 * np.pi * rate_hz * t + lfo_r_phase_offset)
         modulated_delay_samples_r = average_delay_samples + lfo_r * depth_samples
         modulated_delay_samples_r = np.maximum(
-            0.001 * sample_rate, modulated_delay_samples_r
+            0.001 * settings.DEFAULT_SR, modulated_delay_samples_r
         )
 
         for i in range(num_samples):
@@ -156,4 +158,4 @@ def apply_flanger(
             delay_buffer_r = np.roll(delay_buffer_r, 1)
             delay_buffer_r[0] = new_buf_in_r
 
-    return processed_audio, sample_rate
+    return processed_audio

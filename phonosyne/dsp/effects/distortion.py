@@ -1,21 +1,22 @@
 import numpy as np
 
+from phonosyne import settings
+
 
 def apply_distortion(
-    audio_data: np.ndarray, sample_rate: int, drive: float = 0.5, mix: float = 1.0
-) -> tuple[np.ndarray, int]:
+    audio_data: np.ndarray, drive: float = 0.5, mix: float = 1.0
+) -> np.ndarray:
     """
     Applies a simple distortion effect using hard clipping.
 
     Args:
         audio_data: NumPy array of the input audio.
-        sample_rate: Sample rate of the audio in Hz.
         drive: Amount of distortion (0.0 to 1.0). Higher values increase clipping.
                This will scale the input signal before clipping.
         mix: Wet/dry mix (0.0 dry to 1.0 wet).
 
     Returns:
-        A tuple containing the processed audio data (NumPy array) and the sample rate (int).
+        The processed audio data (NumPy array).
     """
     if not 0.0 <= drive <= 1.0:
         raise ValueError("Drive must be between 0.0 and 1.0.")
@@ -25,7 +26,7 @@ def apply_distortion(
     if audio_data.ndim == 0:
         audio_data = np.array([audio_data])
     if audio_data.size == 0:
-        return audio_data, sample_rate
+        return audio_data
 
     original_dtype = audio_data.dtype
     audio_float = audio_data.astype(np.float64)
@@ -60,4 +61,4 @@ def apply_distortion(
         # expecting later normalization. For now, let's clip to -1,1 for float too.
         processed_audio = np.clip(processed_audio, -1.0, 1.0)
 
-    return processed_audio.astype(original_dtype), sample_rate
+    return processed_audio.astype(original_dtype)
