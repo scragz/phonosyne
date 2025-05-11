@@ -29,16 +29,16 @@ Key features:
 - The "inline" mode's file writing expectation is different and might be deprecated.
 """
 
+import json
+import logging
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Literal, Tuple
-from smolagents.local_python_executor import InterpreterError, LocalPythonExecutor
 
-import logging
 import numpy as np
 import soundfile as sf
-import tempfile
-import shutil
-import json
+from smolagents.local_python_executor import InterpreterError, LocalPythonExecutor
 
 from phonosyne import settings
 
@@ -127,6 +127,7 @@ AUTHORIZED_IMPORTS_FOR_DSP = [
     "random",
     "array",
     "json",
+    "phonosyne.dsp.effects",
     "phonosyne.dsp.effects.*",
 ]
 

@@ -88,11 +88,9 @@ class CompilerAgent(Agent):
         model_arg = kwargs.pop("model", settings.MODEL_COMPILER)
 
         # The tools available to this agent
-        # The SDK will use the function signatures and docstrings of these tools
-        # to inform the LLM.
         agent_tools = [
-            execute_python_dsp_code,  # Referred to as PythonCodeExecutionTool in spec
-            validate_audio_file,  # Referred to as AudioValidationTool in spec
+            execute_python_dsp_code,
+            validate_audio_file,
         ]
 
         super().__init__(

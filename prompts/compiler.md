@@ -68,7 +68,7 @@ For each attempt (up to 10):
        - Intended for 32-bit float PCM format.
        - Generated at a sample rate of **48000 Hz**.
      - **Recipe Interpretation**: Carefully interpret the globally available `description` string. Translate phrases related to sound generators (oscillators, noise), envelopes (ADSR, custom shapes), filters (types, cutoff, resonance, sweeps), effects (delay, reverb, chorus), modulation, and mixing logic into corresponding DSP operations using NumPy and SciPy. Use the globally available `duration` float as the target duration.
-     - **Effects**: There are a number of premade DSP effects in `phonosyne.dsp.effects` that should be used where appropriate. You are encouraged to use these creatively, routing them into each other, using them in parallel, creatively sending to them at different times, and otherwise combining them in interesting ways. The current effects available are:
+     - **Effects**: There are a number of premade DSP effects in `phonosyne.dsp.effects` that should be used where appropriate. You are encouraged to use these creatively, routing them into each other, using them in parallel, sending to them at different times, and otherwise using them in interesting ways. The current effects available are:
        - `phonosyne.dsp.effects.apply_delay(audio_data: np.ndarray, sample_rate: int, delay_time_s: float, feedback: float = 0.3, mix: float = 0.5)`
        - `phonosyne.dsp.effects.apply_short_reverb(audio_data: np.ndarray, sample_rate: int, decay_time_s: float = 0.2, mix: float = 0.3)`
        - `phonosyne.dsp.effects.apply_long_reverb(audio_data: np.ndarray, sample_rate: int, decay_time_s: float = 2.0, mix: float = 0.4, diffusion: float = 0.7)`
@@ -90,9 +90,8 @@ For each attempt (up to 10):
      - **MANDATORY SCRIPT RETURN VALUE**: The Python script's final executable line **MUST** evaluate to a Python tuple: `(audio_data_numpy_array, sample_rate_int)`. For example: `(final_mono_array, 48000)`. This is what the `PythonCodeExecutionTool` expects.
      - **Normalization & Clipping**: Before returning the `audio_data_numpy_array`, ensure its values are strictly within the range `[-1.0, 1.0]`. Implement normalization (e.g., to a target peak like -1.0 dBFS) or clipping if necessary to meet this requirement. This is a common validation failure point.
      - **Duration**: The length of the `audio_data_numpy_array` should correspond to the globally available `duration` and the 48000 Hz sample rate.
-     - **Determinism**: If using random processes, ensure they are seeded appropriately. To get `effect_name` for a robust seed: `import json; _parsed_recipe = json.loads(recipe_json); _effect_name_for_seed = _parsed_recipe['effect_name']; random.seed(hash(_effect_name_for_seed) + current_attempt_number)`. Note: `current_attempt_number` will need to be passed or managed if used. For simplicity, you might just use a fixed seed or a hash of the description if `current_attempt_number` isn't available. The `time` module is not reliably available.
      - **Efficiency**: Generate computationally efficient code. The execution environment has operation limits.
-     - **Prohibitions for Generated Script**: No direct file writing, no network calls, no printing to stdout/stderr (unless for temporary debugging that you remove before submitting to the tool).
+     - **Prohibitions for Generated Script**: No direct file writing, no network calls, no printing to stdout/stderr.
        **IMMEDIATELY AFTER GENERATING THE PYTHON CODE, YOUR NEXT ACTION MUST BE TO CALL THE `PythonCodeExecutionTool` WITH IT. DO NOT OUTPUT THE CODE ITSELF OR ANY OTHER MESSAGE. PROCEED DIRECTLY TO TOOL USE.**
 
 2. **Execute Generated Code**:

@@ -33,6 +33,7 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
+from scipy import signal  # Added for filtering
 
 from phonosyne import settings
 from phonosyne.agents.schemas import AnalyzerOutput  # For spec type hint
@@ -170,15 +171,80 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
     # 6. Check for Silence
     # Use a small threshold to define silence.
     # This value means that the loudest sample is quieter than -100dBFS.
-    # SILENCE_THRESHOLD_LINEAR = 10**(-100 / 20) # Moved to settings.py
     if audio_data_mono is not None:  # Only proceed if audio was read successfully
         try:
-            if np.max(np.abs(audio_data_mono)) < settings.SILENCE_THRESHOLD_LINEAR:
+            # --- BEGIN AUDIO FILTERING FOR SILENCE CHECK ---
+            audio_for_silence_check = audio_data_mono.copy()  # Work on a copy
+
+            # Configuration for filtering (consider moving to settings.py)
+            APPLY_BANDPASS_FILTER_FOR_SILENCE = True  # Set to False to disable
+            FILTER_LOW_CUT_HZ = 20.0
+            FILTER_HIGH_CUT_HZ = 20000.0
+            FILTER_ORDER = 4
+
+            if APPLY_BANDPASS_FILTER_FOR_SILENCE and audio_for_silence_check.size > 0:
+                if not np.issubdtype(audio_for_silence_check.dtype, np.floating):
+                    logger.debug(
+                        f"Audio data for silence check dtype is {audio_for_silence_check.dtype}. Converting to float32."
+                    )
+                    audio_for_silence_check = audio_for_silence_check.astype(np.float32)
+
+                current_sample_rate = (
+                    info.samplerate
+                )  # Use the actual sample rate of the file
+                nyquist = 0.5 * current_sample_rate
+                low_norm = FILTER_LOW_CUT_HZ / nyquist
+                high_norm = FILTER_HIGH_CUT_HZ / nyquist
+
+                if high_norm >= 1.0:
+                    high_norm = 0.999
+                if low_norm <= 0.0:
+                    low_norm = 0.00001
+
+                if low_norm < high_norm:
+                    # Check minimum length for sosfiltfilt
+                    # Default padlen for sosfiltfilt is 3 * (sos.shape[1] // 2 - 1) = 6 for a typical 6-column SOS array.
+                    # Signal length must be > padlen.
+                    min_len_for_filter = 3 * FILTER_ORDER  # Conservative estimate
+                    if len(audio_for_silence_check) > min_len_for_filter:
+                        try:
+                            sos = signal.butter(
+                                FILTER_ORDER,
+                                [low_norm, high_norm],
+                                btype="bandpass",
+                                output="sos",
+                            )
+                            audio_for_silence_check = signal.sosfiltfilt(
+                                sos, audio_for_silence_check
+                            )
+                            logger.debug(
+                                f"Applied band-pass filter ({FILTER_LOW_CUT_HZ}Hz - {FILTER_HIGH_CUT_HZ}Hz) "
+                                f"to audio data for silence check."
+                            )
+                        except Exception as e_filter:
+                            logger.warning(
+                                f"Error applying band-pass filter for silence check: {e_filter}. Proceeding with unfiltered audio for silence check."
+                            )
+                    else:
+                        logger.debug(
+                            f"Audio data length {len(audio_for_silence_check)} too short for filtering (min_len ~{min_len_for_filter}). Skipping filter for silence check."
+                        )
+                else:
+                    logger.debug(
+                        f"Invalid filter cutoffs for silence check (low_norm: {low_norm:.4f}, high_norm: {high_norm:.4f}). Skipping filter."
+                    )
+            # --- END AUDIO FILTERING FOR SILENCE CHECK ---
+
+            if (
+                np.max(np.abs(audio_for_silence_check))
+                < settings.SILENCE_THRESHOLD_LINEAR
+            ):
                 errors.append(
-                    f"Audio content is effectively silent (peak < {settings.SILENCE_THRESHOLD_LINEAR:.0e} linear, or {settings.SILENCE_THRESHOLD_DBFS:.0f} dBFS)."
+                    f"Audio content is effectively silent (peak < {settings.SILENCE_THRESHOLD_LINEAR:.0e} linear, or {settings.SILENCE_THRESHOLD_DBFS:.0f} dBFS, after attempting to filter for check)."
                 )
         except Exception as e:
-            msg = f"Could not read audio data for silence check from {file_path}: {e}"  # Should be "Error during silence check"
+            # Changed error message to be more specific to silence check
+            msg = f"Error during silence check for {file_path}: {e}"
             logger.error(msg)
             errors.append(msg)
 

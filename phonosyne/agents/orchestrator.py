@@ -120,8 +120,8 @@ class OrchestratorAgent(Agent):
                 tool_name="CompilerAgentTool",
                 tool_description="Takes a detailed synthesis recipe (JSON from AnalyzerAgentTool), generates Python DSP code, orchestrates its execution and validation using its internal tools, and returns the path to a validated temporary .wav file (string). Input is a JSON string of the synthesis recipe.",
             ),
-            move_file,  # FunctionTool for moving files
-            generate_manifest_file,  # FunctionTool for generating the manifest
+            move_file,
+            generate_manifest_file,
         ]
 
         # Load instructions from the markdown file
