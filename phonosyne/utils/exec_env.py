@@ -77,9 +77,7 @@ RESTRICTED_GLOBALS_INLINE: Dict[str, Any] = {
 AUTHORIZED_IMPORTS_FOR_DSP = [
     "numpy",
     "numpy.*",  # Allow submodules like numpy.random
-    # "scipy", # Removing general scipy to be more specific
-    "scipy.signal",  # Specifically allow scipy.signal
-    "scipy.fft",
+    "scipy",  # Removing general scipy to be more specific
     "soundfile",  # For sf.write if code were to write, but now it returns array
     "math",
     "random",
