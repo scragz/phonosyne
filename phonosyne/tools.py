@@ -76,15 +76,20 @@ async def execute_python_dsp_code(
         # should handle running synchronous functions in a thread pool if called from an async agent.
         # If direct async execution of run_code is required, run_code itself would need to be async
         # or wrapped with asyncio.to_thread. For now, assuming SDK handles it.
+
+        # Sanitize output_filename to remove any leading slashes
+        # to prevent it from being treated as an absolute path from root by Path.
+        sanitized_output_filename = output_filename.lstrip('/')
+
         wav_path: Path = existing_run_code(
             code=code,
-            output_filename=output_filename,
+            output_filename=sanitized_output_filename, # Use sanitized version
             recipe_description=str(description),  # Ensure string type for description
             recipe_duration=float(duration),  # Ensure float type for duration
             recipe_json_str=recipe_json,  # Pass the received recipe_json string
             mode="local_executor",
         )
-        return str(wav_path)
+        return str(wav_path.resolve())
     except json.JSONDecodeError as e:
         return f"JSONDecodeError for recipe_json: {str(e)}"
     except CodeExecutionError as e:
@@ -145,11 +150,35 @@ async def move_file(source_path: str, target_path: str) -> str:
     try:
         source = Path(source_path)
         target = Path(target_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
+
+        if not source.exists():
+            return f"Error: Source file does not exist at {source_path}"
+        if not source.is_file():
+            return f"Error: Source path is not a file: {source_path}"
+
+        # Ensure target directory exists
+        target_parent_dir = target.parent
+        if not target_parent_dir.exists():
+            try:
+                target_parent_dir.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                return (
+                    f"Error: Permission denied to create directory {target_parent_dir}"
+                )
+            except Exception as e:
+                return f"Error creating target directory {target_parent_dir}: {str(e)}"
+        elif not target_parent_dir.is_dir():
+            return f"Error: Target parent path {target_parent_dir} exists but is not a directory."
+
+        # Perform the move operation
         shutil.move(str(source), str(target))
         return f"File moved successfully to {str(target)}"
+    except PermissionError:
+        return f"Error: Permission denied during file move from {source_path} to {target_path}."
+    except OSError as e:
+        return f"OSError moving file from {source_path} to {target_path}: {str(e)}"
     except Exception as e:
-        return f"Error moving file from {source_path} to {target_path}: {str(e)}"
+        return f"Unexpected error moving file from {source_path} to {target_path}: {str(e)}"
 
 
 @function_tool
