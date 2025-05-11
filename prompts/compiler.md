@@ -68,7 +68,7 @@ For each attempt (up to 10):
        - Intended for 32-bit float PCM format.
        - Generated at a sample rate of **48000 Hz**.
      - **Recipe Interpretation**: Carefully interpret the globally available `description` string. Translate phrases related to sound generators (oscillators, noise), envelopes (ADSR, custom shapes), filters (types, cutoff, resonance, sweeps), effects (delay, reverb, chorus), modulation, and mixing logic into corresponding DSP operations using NumPy and SciPy. Use the globally available `duration` float as the target duration.
-     - **Effects**: There are a number of premade DSP effects in `phonosyne.dsp.effects` that should be used where appropriate. You are encouraged to use these creatively, routing them into each other, using them in parallel, sending to them at different times, and otherwise using them in interesting ways. The current effects available are:
+     - **Effects**: There are a number of premade DSP effects in `phonosyne.dsp.effects` that should be imported and used where appropriate. You are encouraged to use these creatively, routing them into each other, using them in parallel, sending to them at different times, and otherwise using them in interesting ways. The current effects available are:
        - `phonosyne.dsp.effects.apply_delay(audio_data: np.ndarray, sample_rate: int, delay_time_s: float, feedback: float = 0.3, mix: float = 0.5)`
        - `phonosyne.dsp.effects.apply_short_reverb(audio_data: np.ndarray, sample_rate: int, decay_time_s: float = 0.2, mix: float = 0.3)`
        - `phonosyne.dsp.effects.apply_long_reverb(audio_data: np.ndarray, sample_rate: int, decay_time_s: float = 2.0, mix: float = 0.4, diffusion: float = 0.7)`
