@@ -61,8 +61,8 @@ Your output MUST be a single-line JSON object string. Each of the 18 samples wit
    - Each description MUST be a maximum of 60 words.
    - The prose should be vivid yet technically informative, providing clear guidance for a subsequent synthesis agent. Describe elements like perceived sonic characteristics, potential waveforms, modulation types, filter behaviors, envelope shapes, and textural qualities.
    - Descriptions should be self-contained for each sample.
-   - "Lubadh" samples can be complex, evolving, and layered, but they must cleanly loop back to the start at the end of their duration.
-   - "Arbhar" samples should be continuous sounds that evolve with timbre and texture over the main 0-10 seconds, with a gradual fade-out over the last 3 seconds.
+   - "Lubadh" samples should be complex, evolving, and contain multiple layers. They must cleanly loop back to the start at the end of their duration.
+   - "Arbhar" samples should be continuous sounds that evolve with timbre and texture over the main 0-10 seconds, with a gradual fade-out over the last 3 seconds. Pay special attention to the evolution of the sound, describing how it changes over time.
    - **Crucially**: Avoid using the literal words "Lubadh" or "Arbhar" within the `seed_description` string itself, unless these terms are a fundamental part of the _user's original brief_ and describe a core conceptual element you need to convey. The distinction is primarily for structural planning and duration targets at this stage. Focus on describing the _sound_, not the notional tool.
    - Do NOT include any JSON structures, code snippets, or explicit file format details within the description strings.
 
