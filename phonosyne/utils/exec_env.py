@@ -29,14 +29,18 @@ Key features:
 - The "inline" mode's file writing expectation is different and might be deprecated.
 """
 
+import array  # Added
 import json
 import logging
+import math  # Added
+import random  # Added
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Literal, Tuple
 
 import numpy as np
+import scipy  # Added
 import soundfile as sf
 from smolagents.local_python_executor import InterpreterError, LocalPythonExecutor
 
@@ -122,13 +126,12 @@ AUTHORIZED_IMPORTS_FOR_DSP = [
     "numpy.*",
     "scipy",
     "scipy.*",
-    "soundfile",
     "math",
     "random",
     "array",
     "json",
-    "phonosyne.dsp.effects",
-    "phonosyne.dsp.effects.*",
+    "phonosyne.dsp.effects",  # Allows generated code to 'import phonosyne.dsp.effects as fx' if ever needed for other reasons
+    "phonosyne.dsp.effects.*",  # Allows generated code to 'from phonosyne.dsp.effects import some_utility' if ever needed
 ]
 
 
@@ -209,14 +212,74 @@ def run_code(
     actual_wav_path = persistent_temp_dir / output_filename
 
     if mode == "local_executor":
-        # LocalPythonExecutor from smolagents takes additional_authorized_imports.
-        # It internally manages its own set of base Python tools (like int, float).
+        dsp_effect_tools = {}
+        # List of effect names (module names) that should have an apply_<effect_name> function
+        effects_to_load = [
+            "autowah",
+            "chorus",
+            "compressor",
+            "delay",
+            "distortion",
+            "dub_echo",
+            "echo",
+            "flanger",
+            "fuzz",
+            "long_reverb",
+            "noise_gate",
+            "overdrive",
+            "particle",
+            "phaser",
+            "rainbow_machine",
+            "short_reverb",
+            "tremolo",
+            "vibrato",
+        ]
+
+        for effect_module_name in effects_to_load:
+            function_name = f"apply_{effect_module_name}"
+            try:
+                # Dynamically import the module and get the function
+                module = __import__(
+                    f"phonosyne.dsp.effects.{effect_module_name}",
+                    fromlist=[function_name],
+                )
+                func = getattr(module, function_name)
+                dsp_effect_tools[function_name] = func
+            except ImportError as e:
+                logger.error(
+                    f"Failed to import {function_name} from phonosyne.dsp.effects.{effect_module_name}: {e}"
+                )
+            except AttributeError as e:
+                logger.error(
+                    f"Function {function_name} not found in phonosyne.dsp.effects.{effect_module_name}: {e}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error loading effect {effect_module_name} ({function_name}): {e}"
+                )
+
         executor = LocalPythonExecutor(
             additional_authorized_imports=AUTHORIZED_IMPORTS_FOR_DSP
         )
-        # Initialize static_tools with BASE_PYTHON_TOOLS from smolagents
-        # and add any other necessary built-ins like 'hash'.
-        executor.send_tools({"hash": hash})
+
+        # Prepare tools and common modules to inject into the executor's scope
+        all_tools_to_send = {
+            "np": np,
+            "numpy": np,  # Allow use of 'numpy.array' if AI generates that
+            "scipy": scipy,
+            "math": math,
+            "random": random,
+            "array": array,  # The array module
+            "json": json,  # json module itself
+            "hash": hash,  # Built-in hash function
+            # Add other specific, safe built-ins or utilities if needed
+        }
+        all_tools_to_send.update(
+            dsp_effect_tools
+        )  # Add all dynamically loaded apply_... functions
+
+        executor.send_tools(all_tools_to_send)
+
         # Inject recipe-specific variables into the executor's state
         variables_to_send = {
             "output_filename": output_filename,
