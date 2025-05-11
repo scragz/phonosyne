@@ -132,6 +132,7 @@ AUTHORIZED_IMPORTS_FOR_DSP = [
     "json",
     "phonosyne.dsp.effects",  # Allows generated code to 'import phonosyne.dsp.effects as fx' if ever needed for other reasons
     "phonosyne.dsp.effects.*",  # Allows generated code to 'from phonosyne.dsp.effects import some_utility' if ever needed
+    "phonosyne.settings", # Added to allow generated scripts to import settings
 ]
 
 
@@ -262,8 +263,8 @@ def run_code(
             additional_authorized_imports=AUTHORIZED_IMPORTS_FOR_DSP
         )
 
-        # Prepare tools and common modules to inject into the executor's scope
-        all_tools_to_send = {
+        # Prepare modules to be sent as variables
+        modules_as_variables = {
             "np": np,
             "numpy": np,  # Allow use of 'numpy.array' if AI generates that
             "scipy": scipy,
@@ -271,23 +272,28 @@ def run_code(
             "random": random,
             "array": array,  # The array module
             "json": json,  # json module itself
+            "settings": settings, # Make the phonosyne.settings module available globally
+        }
+        
+        # Prepare functions/callables to be sent as tools
+        functions_as_tools = {
             "hash": hash,  # Built-in hash function
             # Add other specific, safe built-ins or utilities if needed
         }
-        all_tools_to_send.update(
-            dsp_effect_tools
-        )  # Add all dynamically loaded apply_... functions
+        functions_as_tools.update(dsp_effect_tools)  # Add all dynamically loaded apply_... functions
 
-        executor.send_tools(all_tools_to_send)
-
-        # Inject recipe-specific variables into the executor's state
-        variables_to_send = {
+        # Combine recipe-specific variables with modules for send_variables
+        all_variables_to_send = {
             "output_filename": output_filename,
             "description": recipe_description,
             "duration": recipe_duration,
             "recipe_json": recipe_json_str,  # Make the JSON string available as 'recipe_json'
         }
-        executor.send_variables(variables_to_send)
+        all_variables_to_send.update(modules_as_variables)
+
+        executor.send_variables(all_variables_to_send)
+        executor.send_tools(functions_as_tools)
+
         try:
             # LocalPythonExecutor.__call__ returns a 3-tuple: (output, logs, is_final_answer)
             # The 'output' part is what we expect to be (audio_array, sample_rate).
