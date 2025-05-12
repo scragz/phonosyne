@@ -21,8 +21,8 @@ Any other exit path is a failure. Never announce success, return “OK,” or yi
 
 > **Filename rule**
 > When calling **`FileMoverTool`**, build `target_path` as:
-> `f"{run.output_dir}/{sample.index:02d}_{recipe.effect_name}.wav"`
-> (`recipe.effect_name` must be slugified but human-readable).
+> `f"{run.output_dir}/{recipe.effect_name}.wav"`
+> (`recipe.effect_name` must be slugified but human-readable starting with L1.1, L1.2, A1, etc., e.g. `L3.2_whispering_willows.wav`).
 
 ---
 

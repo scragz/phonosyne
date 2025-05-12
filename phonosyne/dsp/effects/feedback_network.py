@@ -542,7 +542,7 @@ def _rms_watchdog_update(
 # Public API (apply_mfn function, MFN class) will go here
 
 
-def apply_feedback_network(  # Renamed from apply_mfn
+def apply_feedback_network(
     audio_data: np.ndarray,
     graph: MFNGraph,
     sample_rate: int,

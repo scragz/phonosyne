@@ -240,7 +240,7 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
                 < settings.SILENCE_THRESHOLD_LINEAR
             ):
                 errors.append(
-                    f"Audio content is effectively silent (peak < {settings.SILENCE_THRESHOLD_LINEAR:.0e} linear, or {settings.SILENCE_THRESHOLD_DBFS:.0f} dBFS, after attempting to filter for check)."
+                    f"Audio content is effectively silent (peak < {settings.SILENCE_THRESHOLD_LINEAR:.0e} linear, after attempting to filter for check)."
                 )
         except Exception as e:
             # Changed error message to be more specific to silence check
