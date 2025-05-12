@@ -34,9 +34,10 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from phonosyne import __version__  # To display version
-from phonosyne import run_prompt as sdk_run_prompt  # Alias to avoid conflict
+from phonosyne import __version__
+from phonosyne import run_prompt as sdk_run_prompt
 from phonosyne import settings
+from phonosyne.dsp.master import apply_mastering
 from phonosyne.sdk import OpenRouterCreditsError, PhonosyneError
 
 # Initialize Typer app
@@ -170,6 +171,24 @@ def run(  # Changed to synchronous def
 
             error_console.print(traceback.format_exc())
         raise typer.Exit(code=1)
+
+
+@app.command(help="Run the mastering effect.")
+def master(
+    input_file: Path = typer.Argument(
+        ..., help="Path to the input audio file to be mastered."
+    ),
+    output_file: Path = typer.Argument(
+        ..., help="Path to save the mastered audio file."
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose logging output.", is_flag=True
+    ),
+):
+    """
+    Run the mastering effect on an audio file.
+    """
+    apply_mastering(input_file, output_file)
 
 
 @app.callback()
