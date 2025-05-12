@@ -73,7 +73,6 @@ OPENROUTER_MODEL_PROVIDER = OpenRouterModelProvider()
 
 # --- Logging Configuration ---
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)  # Or your desired level
 
 TContext = TypeVar("TContext")
 
@@ -181,30 +180,28 @@ async def run_prompt(
             hooks=DEFAULT_LOGGING_HOOKS,  # Add the logging hooks
         )
         return result.final_output
-    except TypeError as e:
-        if "'NoneType' object is not subscriptable" in str(e):
-            logger.error(
-                "OpenRouter API error: NoneType is not subscriptable. This likely means your OpenRouter credits are exhausted."
-            )
-            raise OpenRouterCreditsError(
-                "OpenRouter credits exhausted. Please add more credits to your account."
-            ) from e
-        raise
     except OpenAIError as e:
         # Handle OpenAI API errors that might be related to credits or authentication
+        logger.error(
+            f"OpenAI API error occurred: {type(e).__name__} - {str(e)}", exc_info=True
+        )  # Enhanced logging
         error_message = str(e).lower()
         if "insufficient" in error_message and (
             "credits" in error_message
             or "funds" in error_message
             or "balance" in error_message
         ):
-            logger.error(f"OpenRouter API error: {str(e)}")
-            raise OpenRouterCreditsError(
+            raise OpenRouterCreditsError(  # Keep specific credit error
                 "OpenRouter credits exhausted. Please add more credits to your account."
             ) from e
         else:
-            logger.error(f"OpenAI API error: {str(e)}")
-            raise PhonosyneError(f"OpenAI API error: {str(e)}") from e
+            raise PhonosyneError(
+                f"OpenAI API error: {type(e).__name__} - {str(e)}"
+            ) from e
     except Exception as e:
-        logger.error(f"Unexpected error in Phonosyne pipeline: {str(e)}")
-        raise
+        logger.error(
+            f"Unexpected error in Phonosyne pipeline: {type(e).__name__} - {str(e)}",
+            exc_info=True,
+        )  # Enhanced logging
+        # Consider if any other specific custom exceptions should be raised here
+        raise  # Re-raise the original exception or a wrapped PhonosyneError

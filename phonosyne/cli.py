@@ -75,17 +75,43 @@ def run(  # Changed to synchronous def
     log_level = logging.DEBUG if verbose else logging.INFO
     # A more robust logging setup might involve a shared logger configuration module.
     # For now, basic configuration:
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    # logging.basicConfig(
+    #     level=log_level,
+    #     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    #     datefmt="%Y-%m-%d %H:%M:%S",
+    # )
+    # Get the root logger
+    root_logger = logging.getLogger()  # Get the root logger
+    root_logger.setLevel(log_level)  # Set level for your app
+
+    # Remove any existing handlers to avoid duplicate messages or conflicts
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # Add a new stream handler for your application
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(log_level)
+    formatter = logging.Formatter(
+        fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    # Suppress overly verbose logs from dependencies if needed
-    # logging.getLogger("httpx").setLevel(logging.WARNING)
-    # logging.getLogger("openai").setLevel(logging.WARNING)
+    stream_handler.setFormatter(formatter)
+    root_logger.addHandler(stream_handler)
+
+    # Suppress overly verbose logs from common HTTP libraries
+    # These should be set AFTER your root logger and its handlers are configured.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    # Specifically target the logger used by openai's base client for HTTP details
+    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 
     if verbose:
         console.print(f"Verbose mode enabled. Log level set to DEBUG.", style="dim")
+        root_logger.debug("Root logger reconfigured for DEBUG level by CLI.")
+    else:
+        # Optionally, confirm INFO level if not verbose, or remove this else block
+        root_logger.info("Root logger reconfigured for INFO level by CLI.")
 
     console.print(
         Panel(Text(f"Phonosyne v{__version__}", justify="center", style="bold green"))

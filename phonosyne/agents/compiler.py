@@ -86,6 +86,7 @@ class CompilerAgent(Agent):
         agent_name = kwargs.pop("name", "PhonosyneCompiler_Agent")
         # The 'model' kwarg will be passed in by OrchestratorAgent.
         model_arg = kwargs.pop("model", settings.MODEL_COMPILER)
+        logger.info(f"CompilerAgent initializing with model_arg: {model_arg!r}")
 
         # The tools available to this agent
         agent_tools = [

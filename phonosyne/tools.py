@@ -20,6 +20,7 @@
 """
 
 import json
+import logging  # Added
 import shutil
 from pathlib import Path
 
@@ -35,6 +36,8 @@ from phonosyne.agents.schemas import (  # Add other schemas as they become neces
 # Import specific utilities needed for the tools
 from phonosyne.utils.exec_env import CodeExecutionError
 from phonosyne.utils.exec_env import run_code as existing_run_code
+
+logger = logging.getLogger(__name__)  # Added
 
 
 @function_tool
@@ -55,6 +58,14 @@ async def execute_python_dsp_code(
     Returns:
         Path to the generated temporary .wav file if successful, or an error message string.
     """
+    logger.info(
+        f"execute_python_dsp_code called with output_filename: {output_filename}"
+    )  # Added
+    # Log the first 500 chars of the code for brevity in logs, indicate if longer
+    code_to_log = code[:500] + "..." if len(code) > 500 else code
+    logger.debug(
+        f"execute_python_dsp_code: Received Python code (first 500 chars):\\n{code_to_log}"
+    )  # Added
     try:
         recipe_data = json.loads(recipe_json)
 
