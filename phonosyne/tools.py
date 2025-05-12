@@ -39,81 +39,209 @@ from phonosyne.utils.exec_env import run_code as existing_run_code
 
 logger = logging.getLogger(__name__)  # Added
 
+# Determine Project Root and Output Directory for executed code
+try:
+    from phonosyne import settings as app_settings
+
+    # Assuming BASE_DIR is a Path object or string representing the project root
+    PROJECT_ROOT = Path(app_settings.BASE_DIR).resolve()
+    logger.info(f"Using PROJECT_ROOT from settings.BASE_DIR: {PROJECT_ROOT}")
+except (ImportError, AttributeError, TypeError) as e:
+    logger.warning(
+        f"Could not import or use app_settings.BASE_DIR (Error: {e}). "
+        "Falling back to deriving project root from tools.py location."
+    )
+    # tools.py is in phonosyne/tools.py, so parent.parent should be project root
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    logger.info(f"Using fallback PROJECT_ROOT: {PROJECT_ROOT}")
+
+EXEC_ENV_OUTPUT_DIR = PROJECT_ROOT / "output" / "exec_env_output"
+logger.info(f"Execution environment output directory set to: {EXEC_ENV_OUTPUT_DIR}")
+
 
 @function_tool
 async def execute_python_dsp_code(
     code: str, output_filename: str, recipe_json: str
 ) -> str:
     """
-    Executes the provided Python DSP code safely and saves the output as a temporary .wav file.
+    Executes Python DSP code, aiming to save the output .wav file directly into
+    the project's output directory (output/exec_env_output/).
+    If direct save isn't possible, it attempts to move the file from a temporary location.
     The DSP code must return a tuple: (numpy_array, sample_rate).
-    The 'description' and 'duration' from the recipe_json will be available in the executed code's scope.
+    'description' and 'duration' from recipe_json are available in the code's scope.
 
     Args:
-        code: The Python DSP code string to execute.
-        output_filename: Desired unique name for the output .wav file (e.g., "effect_attempt_1.wav").
-        recipe_json: A JSON string of the synthesis recipe (AnalyzerOutput schema)
-                     containing 'description' and 'duration'.
+        code: The Python DSP code string.
+        output_filename: Suggested filename (e.g., "effect_attempt_1.wav"). Path components will be stripped.
+        recipe_json: JSON string of the synthesis recipe (AnalyzerOutput schema).
 
     Returns:
-        Path to the generated temporary .wav file if successful, or an error message string.
+        Absolute path to the .wav file in output/exec_env_output/ on success, or an error message.
     """
-    logger.info(
-        f"execute_python_dsp_code called with output_filename: {output_filename}"
-    )  # Added
-    # Log the first 500 chars of the code for brevity in logs, indicate if longer
+    logger.info(f"execute_python_dsp_code: initial output_filename='{output_filename}'")
     code_to_log = code[:500] + "..." if len(code) > 500 else code
-    logger.debug(
-        f"execute_python_dsp_code: Received Python code (first 500 chars):\\n{code_to_log}"
-    )  # Added
+    logger.debug(f"Code (first 500 chars):\\n{code_to_log}")
+
     try:
         recipe_data = json.loads(recipe_json)
-
         if not isinstance(recipe_data, dict):
-            return f"Error: recipe_json did not decode to a dictionary. Decoded to: {type(recipe_data)}"
+            err_msg = f"Error: recipe_json did not decode to a dictionary. Type: {type(recipe_data)}"
+            logger.error(err_msg)
+            return err_msg
 
         description = recipe_data.get("description")
         duration = recipe_data.get("duration")
-
         if description is None or duration is None:
-            missing_keys = []
-            if description is None:
-                missing_keys.append("'description'")
-            if duration is None:
-                missing_keys.append("'duration'")
-            return f"Error: {', '.join(missing_keys)} missing from recipe_json."
+            missing = [
+                k
+                for k, v in {"description": description, "duration": duration}.items()
+                if v is None
+            ]
+            err_msg = f"Error: {', '.join(missing)} missing from recipe_json."
+            logger.error(err_msg)
+            return err_msg
 
-        # existing_run_code is synchronous. The openai-agents SDK's @function_tool
-        # should handle running synchronous functions in a thread pool if called from an async agent.
-        # If direct async execution of run_code is required, run_code itself would need to be async
-        # or wrapped with asyncio.to_thread. For now, assuming SDK handles it.
+        # 1. Ensure the designated output directory exists
+        try:
+            EXEC_ENV_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            logger.info(
+                f"Ensured execution output directory exists: {EXEC_ENV_OUTPUT_DIR}"
+            )
+        except Exception as mkdir_err:
+            err_msg = f"CRITICAL ERROR: Cannot create/access output directory {EXEC_ENV_OUTPUT_DIR}: {mkdir_err}"
+            logger.error(err_msg, exc_info=True)
+            return err_msg
 
-        # Sanitize output_filename to remove any leading slashes and ensure it doesn't try to escape the output dir
-        sanitized_output_filename = output_filename.lstrip("/")
-
-        # Make sure the output path is absolute and references our output directory
-        wav_path: Path = existing_run_code(
-            code=code,
-            output_filename=sanitized_output_filename,  # Use sanitized version
-            recipe_description=str(description),  # Ensure string type for description
-            recipe_duration=float(duration),  # Ensure float type for duration
-            recipe_json_str=recipe_json,  # Pass the received recipe_json string
-        )
-
-        # Ensure the path is absolute and exists before returning
-        wav_path = wav_path.resolve()
-        if not wav_path.exists():
-            raise FileNotFoundError(
-                f"Generated file does not exist at path: {wav_path}"
+        # 2. Sanitize output_filename to get a safe base name.
+        base_name_candidate = Path(output_filename).name
+        if not base_name_candidate or base_name_candidate in (".", ".."):
+            base_name_candidate = "default_dsp_output.wav"
+            logger.warning(
+                f"Original output_filename '{output_filename}' was invalid/empty, using '{base_name_candidate}'"
             )
 
-        return str(wav_path)
+        if not base_name_candidate.lower().endswith(".wav"):
+            final_base_filename = f"{base_name_candidate}.wav"
+        else:
+            final_base_filename = base_name_candidate
+        logger.info(f"Sanitized base filename: {final_base_filename}")
+
+        # 3. Construct the desired final absolute path.
+        desired_final_wav_path = (EXEC_ENV_OUTPUT_DIR / final_base_filename).resolve()
+        logger.info(
+            f"Targeting final WAV path for direct write: {desired_final_wav_path}"
+        )
+
+        # 4. Call existing_run_code, passing the full desired path.
+        returned_path_str_from_exec = existing_run_code(
+            code=code,
+            output_filename=str(
+                desired_final_wav_path
+            ),  # Attempt direct write to target
+            recipe_description=str(description),
+            recipe_duration=float(duration),
+            recipe_json_str=recipe_json,
+        )
+
+        actually_written_path = Path(returned_path_str_from_exec).resolve()
+        logger.info(f"existing_run_code reported writing to: {actually_written_path}")
+
+        final_wav_path_to_return: Path | None = None
+
+        # 5. Check where the file actually ended up.
+        if not actually_written_path.exists():
+            err_msg = (
+                f"Error: existing_run_code path {actually_written_path} does not exist."
+            )
+            logger.error(err_msg)
+            # Check if it wrote to desired_final_wav_path anyway and just returned a bad path
+            if desired_final_wav_path.exists() and desired_final_wav_path.is_file():
+                logger.warning(
+                    f"File found at {desired_final_wav_path} despite existing_run_code returning non-existent path. Using this."
+                )
+                final_wav_path_to_return = desired_final_wav_path
+            else:
+                return err_msg  # File is truly missing
+        elif actually_written_path == desired_final_wav_path:
+            logger.info(
+                f"Success: existing_run_code wrote directly to desired location: {desired_final_wav_path}"
+            )
+            final_wav_path_to_return = desired_final_wav_path
+        else:
+            # existing_run_code wrote somewhere else (e.g., /tmp). Attempt to move.
+            logger.warning(
+                f"existing_run_code wrote to {actually_written_path} instead of {desired_final_wav_path}. Attempting to move."
+            )
+            try:
+                # Ensure target parent dir exists (should already, but good practice)
+                desired_final_wav_path.parent.mkdir(parents=True, exist_ok=True)
+                if (
+                    desired_final_wav_path.exists()
+                ):  # If target (e.g. from a previous failed run) exists
+                    logger.warning(
+                        f"Target file {desired_final_wav_path} already exists. Overwriting."
+                    )
+                    desired_final_wav_path.unlink()
+
+                shutil.copy2(str(actually_written_path), str(desired_final_wav_path))
+                logger.info(
+                    f"File successfully copied from {actually_written_path} to {desired_final_wav_path}"
+                )
+
+                if actually_written_path.exists() and actually_written_path.is_file():
+                    actually_written_path.unlink()
+                    logger.info(
+                        f"Successfully unlinked source file: {actually_written_path}"
+                    )
+
+                final_wav_path_to_return = desired_final_wav_path
+            except Exception as move_err:
+                err_msg = f"Error moving file from {actually_written_path} to {desired_final_wav_path}: {move_err}"
+                logger.error(err_msg, exc_info=True)
+                # File is at actually_written_path but couldn't be moved. Return error to avoid using /tmp path.
+                return err_msg
+
+        # 6. Final verification
+        if (
+            not final_wav_path_to_return
+            or not final_wav_path_to_return.exists()
+            or not final_wav_path_to_return.is_file()
+        ):
+            err_msg = f"Error: Final WAV path {final_wav_path_to_return} is invalid or file not found after processing."
+            logger.error(err_msg)
+            # Check if the original temp file still exists if move failed partway
+            if (
+                actually_written_path.exists()
+                and actually_written_path != final_wav_path_to_return
+            ):
+                logger.error(
+                    f"Original file at {actually_written_path} might still exist if move failed."
+                )
+            return err_msg
+
+        logger.info(
+            f"execute_python_dsp_code successfully produced: {final_wav_path_to_return}"
+        )
+        return str(final_wav_path_to_return)
+
     except json.JSONDecodeError as e:
-        return f"JSONDecodeError for recipe_json: {str(e)}"
-    except CodeExecutionError as e:
-        return f"CodeExecutionError: {str(e)}"
+        err_msg = f"JSONDecodeError for recipe_json: {str(e)}"
+        logger.error(err_msg, exc_info=True)
+        return err_msg
+    except (
+        CodeExecutionError
+    ) as e:  # Assuming this is a custom error from existing_run_code
+        err_msg = f"CodeExecutionError from existing_run_code: {str(e)}"
+        logger.error(err_msg, exc_info=True)
+        return err_msg
+    except FileNotFoundError as e:
+        err_msg = f"FileNotFoundError encountered: {str(e)}"
+        logger.error(err_msg, exc_info=True)
+        return err_msg
     except Exception as e:
-        return f"Unexpected error during code execution: {str(e)}"
+        err_msg = f"Unexpected error in execute_python_dsp_code: {str(e)}"
+        logger.error(err_msg, exc_info=True)
+        return err_msg
 
 
 # Import specific utilities needed for the AudioValidationTool
@@ -181,8 +309,32 @@ async def move_file(source_path: str, target_path: str) -> str:
         # Diagnostic logging - will appear in the agent's output
         print(f"Moving file from {source} to {target}")
 
+        # Check if the file exists at the provided source path
         if not source.exists():
-            return f"Error: Source file does not exist at {source} (from {source_path})"
+            # Check if this might be a file in the temporary directory
+            alternative_sources = []
+
+            # Case 1: If source path is already in /tmp/ or /private/tmp/, no need for alternatives
+            if "/tmp/" in str(source_path) or "/private/tmp/" in str(source_path):
+                pass  # We'll just return the error below
+            else:
+                # Case 2: Check if there's a file with the same name in /tmp/
+                tmp_path_1 = Path("/tmp") / source.name
+                if tmp_path_1.exists() and tmp_path_1.is_file():
+                    alternative_sources.append(tmp_path_1)
+
+                # Case 3: Check if there's a file with the same name in /private/tmp/
+                tmp_path_2 = Path("/private/tmp") / source.name
+                if tmp_path_2.exists() and tmp_path_2.is_file():
+                    alternative_sources.append(tmp_path_2)
+
+            if alternative_sources:
+                # Use the first found alternative
+                source = alternative_sources[0]
+                print(f"Found source file at alternative location: {source}")
+            else:
+                return f"Error: Source file does not exist at {source} (from {source_path})"
+
         if not source.is_file():
             return f"Error: Source path is not a file: {source} (from {source_path})"
 

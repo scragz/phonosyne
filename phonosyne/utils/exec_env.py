@@ -27,6 +27,7 @@ import json
 import logging
 import math
 import random
+import shutil
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -153,8 +154,17 @@ def run_code(
 
     logger.info(f"Writing output to directory: {persistent_temp_dir}")
 
+    # Extract just the filename without any path components
+    # This ensures we don't accidentally create nested paths
+    safe_filename = Path(output_filename).name
+    if not safe_filename or safe_filename in (".", ".."):
+        safe_filename = "default_dsp_output.wav"
+        logger.warning(
+            f"Original output_filename '{output_filename}' was invalid/empty, using '{safe_filename}'"
+        )
+
     # Create a Path object for the final intended output
-    actual_wav_path = persistent_temp_dir / output_filename
+    actual_wav_path = persistent_temp_dir / safe_filename
     logger.info(f"Full output path will be: {actual_wav_path}")
 
     dsp_effect_tools = {}
@@ -337,9 +347,40 @@ def run_code(
                     f"Audio data successfully saved to {actual_wav_path} (Size: {actual_wav_path.stat().st_size} bytes)"
                 )
             else:
-                raise FileNotFoundError(
-                    f"Failed to create WAV file at {actual_wav_path}"
-                )
+                # Check if the file might have been created in the system temp directory
+                tmp_path = None
+                if "/tmp/" in str(output_filename) or "/private/tmp/" in str(
+                    output_filename
+                ):
+                    tmp_path = Path(output_filename)
+                    if tmp_path.exists() and tmp_path.is_file():
+                        logger.warning(
+                            f"File was created in system temp directory: {tmp_path}"
+                        )
+                        try:
+                            # Copy file from temp to the intended location
+                            shutil.copy2(str(tmp_path), str(actual_wav_path))
+                            logger.info(
+                                f"Successfully copied from {tmp_path} to {actual_wav_path}"
+                            )
+                            # Update the path to be returned
+                            tmp_path.unlink()
+                            logger.info(f"Removed original temp file: {tmp_path}")
+                        except Exception as copy_err:
+                            logger.error(
+                                f"Error copying from temp dir: {copy_err}",
+                                exc_info=True,
+                            )
+                            raise FileNotFoundError(
+                                f"Failed to copy temp file from {tmp_path} to {actual_wav_path}: {copy_err}"
+                            )
+                    else:
+                        tmp_path = None
+
+                if not tmp_path:
+                    raise FileNotFoundError(
+                        f"Failed to create WAV file at {actual_wav_path}"
+                    )
         except Exception as e:
             logger.error(f"Error saving audio data to file: {e}", exc_info=True)
             raise CodeExecutionError(f"Failed to save WAV file: {e}") from e
