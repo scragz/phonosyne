@@ -60,7 +60,7 @@ def _simple_lowpass_filter(
 
 def apply_dub_echo(
     audio_data: np.ndarray,
-    echo_time_s: float = 0.7,
+    delay_time_s: float = 0.7,
     feedback: float = 0.65,
     mix: float = 0.6,
     damping_factor: float = 0.3,  # 0.0 (no damping) to 1.0 (max damping)
@@ -71,7 +71,7 @@ def apply_dub_echo(
 
     Args:
         audio_data: NumPy array of the input audio.
-        echo_time_s: Time for each echo repetition in seconds.
+        delay_time_s: Time for each echo repetition in seconds.
         feedback: Feedback gain (0.0 to <1.0).
         mix: Wet/dry mix (0.0 dry to 1.0 wet).
         damping_factor: Controls high-frequency damping in echoes.
@@ -88,7 +88,7 @@ def apply_dub_echo(
         raise ValueError("Mix must be between 0.0 and 1.0.")
 
     sample_rate = settings.DEFAULT_SR
-    delay_samples = int(echo_time_s * sample_rate)
+    delay_samples = int(delay_time_s * sample_rate)
 
     if delay_samples <= 0:
         # No actual delay, just mix

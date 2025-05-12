@@ -77,8 +77,8 @@ For each attempt (up to 10):
        - `apply_compressor(audio_data: np.ndarray, threshold_db: float = -20.0, ratio: float = 4.0, attack_ms: float = 5.0, release_ms: float = 50.0, makeup_gain_db: float = 0.0, knee_db: float = 0.0)`
        - `apply_delay(audio_data: np.ndarray, delay_time_s: float, feedback: float = 0.3, mix: float = 0.5)`
        - `apply_distortion(audio_data: np.ndarray, drive: float = 0.5, mix: float = 1.0)`
-       - `apply_dub_echo(audio_data: np.ndarray, echo_time_s: float = 0.7, feedback: float = 0.65, mix: float = 0.6, damping_factor: float = 0.3)`
-       - `apply_echo(audio_data: np.ndarray, echo_time_s: float = 0.5, feedback: float = 0.4, mix: float = 0.5)`
+       - `apply_dub_echo(audio_data: np.ndarray, delay_time_s: float = 0.7, feedback: float = 0.65, mix: float = 0.6, damping_factor: float = 0.3)`
+       - `apply_echo(audio_data: np.ndarray, delay_time_s: float = 0.5, feedback: float = 0.4, mix: float = 0.5)`
        - `apply_flanger(audio_data: np.ndarray, rate_hz: float = 0.2, depth_ms: float = 1.5, mix: float = 0.5, feedback: float = 0.7, stereo_spread_ms: float = 0.2)`
        - `apply_fuzz(audio_data: np.ndarray, fuzz_amount: float = 0.8, gain_db: float = 0.0, mix: float = 1.0)`
        - `apply_long_reverb(audio_data: np.ndarray, decay_time_s: float = 2.0, mix: float = 0.4, diffusion: float = 0.7)`

@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 # Core numerics and Numba availability
 import numpy as np
 
+from phonosyne import settings
+
 # Setup logger for this module
 logger = logging.getLogger(__name__)  # Added
 
@@ -545,7 +547,6 @@ def _rms_watchdog_update(
 def apply_feedback_network(
     audio_data: np.ndarray,
     graph: MFNGraph,
-    sample_rate: int,
     block_size: int = 256,  # Default block size, can be tuned
     use_numba: bool = True,
     enable_rms_watchdog: bool = True,
@@ -583,6 +584,7 @@ def apply_feedback_network(
         return audio_data.copy()
 
     num_samples = len(audio_data)
+    sample_rate = settings.DEFAULT_SR
     output_audio = np.zeros_like(audio_data, dtype=NUMERIC_DTYPE)
 
     # Initialize delay lines and write positions for each node
