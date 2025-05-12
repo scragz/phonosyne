@@ -44,7 +44,7 @@ SILENCE_THRESHOLD_LINEAR: float = 10 ** (
 )  # Linear threshold for silence detection
 
 # File System Settings
-DEFAULT_OUT_DIR: Path = Path("./output")
+DEFAULT_OUT_DIR: Path = Path("./output").absolute()
 PROMPTS_DIR: Path = Path("./prompts")
 
 # Agent & Compiler Settings

@@ -77,10 +77,10 @@ async def execute_python_dsp_code(
         # If direct async execution of run_code is required, run_code itself would need to be async
         # or wrapped with asyncio.to_thread. For now, assuming SDK handles it.
 
-        # Sanitize output_filename to remove any leading slashes
-        # to prevent it from being treated as an absolute path from root by Path.
+        # Sanitize output_filename to remove any leading slashes and ensure it doesn't try to escape the output dir
         sanitized_output_filename = output_filename.lstrip("/")
 
+        # Make sure the output path is absolute and references our output directory
         wav_path: Path = existing_run_code(
             code=code,
             output_filename=sanitized_output_filename,  # Use sanitized version
@@ -88,7 +88,15 @@ async def execute_python_dsp_code(
             recipe_duration=float(duration),  # Ensure float type for duration
             recipe_json_str=recipe_json,  # Pass the received recipe_json string
         )
-        return str(wav_path.resolve())
+
+        # Ensure the path is absolute and exists before returning
+        wav_path = wav_path.resolve()
+        if not wav_path.exists():
+            raise FileNotFoundError(
+                f"Generated file does not exist at path: {wav_path}"
+            )
+
+        return str(wav_path)
     except json.JSONDecodeError as e:
         return f"JSONDecodeError for recipe_json: {str(e)}"
     except CodeExecutionError as e:
@@ -118,12 +126,20 @@ async def validate_audio_file(file_path: str, spec_json: str) -> str:
         "Validation successful" if all checks pass, otherwise a string detailing validation errors.
     """
     try:
+        # Resolve path to absolute
+        abs_file_path = Path(file_path).resolve()
+        print(f"Validating audio file at path: {abs_file_path}")
+
+        if not abs_file_path.exists():
+            return f"Validation error: Audio file does not exist at {abs_file_path} (from {file_path})"
+
         spec_dict = json.loads(spec_json)
         # AnalyzerOutput is already imported at the top of the file
         analyzer_spec = AnalyzerOutput(**spec_dict)
 
         # existing_validate_wav is synchronous. Assuming openai-agents SDK handles this.
-        existing_validate_wav(file_path=Path(file_path), spec=analyzer_spec)
+        existing_validate_wav(file_path=abs_file_path, spec=analyzer_spec)
+        print(f"Audio file at {abs_file_path} successfully validated")
         return "Validation successful"
     except ValidationFailedError as e:
         return f"ValidationFailedError: {str(e)}"
@@ -147,19 +163,24 @@ async def move_file(source_path: str, target_path: str) -> str:
         A success message with the target path, or an error message string.
     """
     try:
-        source = Path(source_path)
-        target = Path(target_path)
+        # Use resolve() to get absolute paths
+        source = Path(source_path).resolve()
+        target = Path(target_path).resolve()
+
+        # Diagnostic logging - will appear in the agent's output
+        print(f"Moving file from {source} to {target}")
 
         if not source.exists():
-            return f"Error: Source file does not exist at {source_path}"
+            return f"Error: Source file does not exist at {source} (from {source_path})"
         if not source.is_file():
-            return f"Error: Source path is not a file: {source_path}"
+            return f"Error: Source path is not a file: {source} (from {source_path})"
 
         # Ensure target directory exists
         target_parent_dir = target.parent
         if not target_parent_dir.exists():
             try:
                 target_parent_dir.mkdir(parents=True, exist_ok=True)
+                print(f"Created target directory: {target_parent_dir}")
             except PermissionError:
                 return (
                     f"Error: Permission denied to create directory {target_parent_dir}"
@@ -170,8 +191,23 @@ async def move_file(source_path: str, target_path: str) -> str:
             return f"Error: Target parent path {target_parent_dir} exists but is not a directory."
 
         # Perform the move operation
-        shutil.move(str(source), str(target))
-        return f"File moved successfully to {str(target)}"
+        if target.exists():
+            # If target already exists, remove it first to avoid issues
+            target.unlink()
+            print(f"Removed existing target file: {target}")
+
+        # Use shutil.copy2 followed by source.unlink() instead of shutil.move
+        # This is more robust across different filesystems
+        shutil.copy2(str(source), str(target))
+        print(f"Copied file to {target}")
+
+        source.unlink()
+        print(f"Removed source file: {source}")
+
+        if not target.exists():
+            return f"Error: File move operation failed. Target file does not exist at {target} after attempted move."
+
+        return f"File moved successfully to {target}"
     except PermissionError:
         return f"Error: Permission denied during file move from {source_path} to {target_path}."
     except OSError as e:

@@ -241,12 +241,19 @@ def run_code(
     executor.send_tools(functions_as_tools)
 
     try:
+        logger.debug(
+            f"Attempting to execute code for {output_filename}:\\n---\\n{code}\\n---"
+        )
         # LocalPythonExecutor.__call__ returns a 3-tuple: (output, logs, is_final_answer)
-        # The 'output' part is what we expect to be (audio_array, sample_rate).
+        # The 'output' (here, `code_output`) is what the LLM-generated code itself returns.
         code_output, logs, is_final_answer = executor(
             code
         )  # This is the actual execution call
-        logger.debug(f"LocalPythonExecutor logs: {logs}")
+        logger.debug(
+            f"LocalPythonExecutor raw output (result of executed code) for {output_filename}: {code_output!r}"
+        )
+        logger.debug(f"LocalPythonExecutor logs for {output_filename}: {logs}")
+
         if (
             is_final_answer
         ):  # Phonosyne doesn't use final_answer concept from smolagents here
@@ -256,25 +263,59 @@ def run_code(
 
         if code_output is None:
             raise CodeExecutionError(
-                "Code executed with LocalPythonExecutor returned None as its main output. "
-                "Expected a numpy.ndarray."
+                "Executed code returned None. "
+                "Expected a (numpy.ndarray, int) tuple for (audio_data, sample_rate)."
             )
 
-        # Expect a single numpy array as output
-        if not isinstance(code_output, np.ndarray):
+        audio_data: np.ndarray | None = None
+        sample_rate: int | None = None
+
+        # Primary expectation: (numpy.ndarray, int) tuple as per overview.md
+        if isinstance(code_output, tuple) and len(code_output) == 2:
+            potential_audio_data, potential_sample_rate = code_output
+            if not isinstance(potential_audio_data, np.ndarray):
+                raise CodeExecutionError(
+                    "First element of the tuple returned by executed code is not a numpy.ndarray."
+                    f" Got: {type(potential_audio_data)}"
+                )
+            if not isinstance(potential_sample_rate, int):
+                raise CodeExecutionError(
+                    "Second element of the tuple returned by executed code is not an int (sample_rate)."
+                    f" Got: {type(potential_sample_rate)}"
+                )
+            audio_data = potential_audio_data
+            sample_rate = potential_sample_rate
+            logger.info(
+                f"Executed code for {output_filename} returned (audio_data, sample_rate) tuple. "
+                f"Audio data shape: {audio_data.shape}, Sample rate: {sample_rate} Hz."
+            )
+        elif isinstance(
+            code_output, np.ndarray
+        ):  # Fallback for legacy/incorrect direct ndarray return
+            audio_data = code_output
+            sample_rate = settings.DEFAULT_SR  # Use global default sample rate
+            logger.warning(
+                f"Executed code for {output_filename} returned a direct numpy.ndarray instead of the expected (audio_data, sample_rate) tuple. "
+                f"Using default sample rate: {sample_rate} Hz. Audio data shape: {audio_data.shape}."
+            )
+        else:  # Neither None, nor tuple, nor ndarray
             raise CodeExecutionError(
-                "Code executed with LocalPythonExecutor did not return a numpy.ndarray as its main output."
-                f" Got: {type(code_output)}, Value: {code_output!r}"
+                "Executed code did not return the expected (numpy.ndarray, int) tuple or a direct numpy.ndarray. "
+                f"Got type: {type(code_output)}, Value: {code_output!r}"
             )
 
-        audio_data = code_output
-        sample_rate = settings.DEFAULT_SR  # Use global default sample rate
+        # Ensure audio_data and sample_rate are valid before proceeding (should be caught above by checks)
+        if (
+            audio_data is None or sample_rate is None
+        ):  # This should ideally not be reached if logic above is correct
+            raise CodeExecutionError(
+                "Internal error: audio_data or sample_rate not set after processing code output. This indicates a flaw in run_code's logic."
+            )
 
         logger.info(
-            f"Code executed successfully. Returned audio data shape: {audio_data.shape}. "
-            f"Using default sample rate: {sample_rate} Hz."
+            f"Processed output for {output_filename}. Audio data shape: {audio_data.shape}, "
+            f"Sample rate: {sample_rate} Hz."
         )
-
         # Save the returned audio data to the WAV file
         try:
             # Ensure directory exists
