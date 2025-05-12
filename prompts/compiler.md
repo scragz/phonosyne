@@ -56,6 +56,7 @@ For each attempt (up to 10):
 1. **Generate Python DSP Code**: Based on the input recipe's `description` and `duration`, and incorporating feedback from any previous failed attempts, write a complete Python 3 script.
 
    - **Critical Python Script Requirements (Your generated code MUST adhere to these):**
+
      - **Available Variables**: Your script will have the following global variables directly available:
        - `description: str` (The natural language synthesis instructions).
        - `duration: float` (The target duration in seconds).
@@ -67,6 +68,7 @@ For each attempt (up to 10):
        - A 1D NumPy array (mono).
        - Intended for 32-bit float PCM format.
        - Generated at a sample rate of **48000 Hz**.
+       - CRITICAL: The array length must be exactly `int(duration * 48000)` samples to match the requested duration.
      - **Recipe Interpretation**: Carefully interpret the globally available `description` string. Translate phrases related to sound generators (oscillators, noise), envelopes (ADSR, custom shapes), filters (types, cutoff, resonance, sweeps), effects (delay, reverb, chorus), modulation, and mixing logic into corresponding DSP operations using NumPy and SciPy. Use the globally available `duration` float as the target duration.
      - **Effects**: There are a number of premade DSP effectsthat should used where appropriate. You are encouraged to use these creatively, routing them into each other, using them in parallel, sending to them at different times, and otherwise using them in interesting ways. The current effects available are:
        - `apply_autowah(audio_data: np.ndarray, mix: float = 0.7, sensitivity: float = 0.8, attack_ms: float = 10.0, release_ms: float = 70.0, base_freq_hz: float = 100.0, sweep_range_hz: float = 2000.0, q_factor: float = 2.0, lfo_rate_hz: float = 0.0, lfo_depth: float = 0.0)`
@@ -90,6 +92,22 @@ For each attempt (up to 10):
      - **MANDATORY SCRIPT RETURN VALUE**: The Python script\'s final executable line **MUST** evaluate to a single `numpy.ndarray` representing the mono audio data. For example: `final_mono_array`. The `PythonCodeExecutionTool` will handle using `settings.DEFAULT_SR` when creating the WAV file.
      - **Normalization & Clipping**: Before returning the `audio_data_numpy_array`, ensure its values are strictly within the range `[-1.0, 1.0]`. Implement normalization (e.g., to a target peak like -1.0 dBFS) or clipping if necessary to meet this requirement. This is a common validation failure point.
      - **Duration**: The length of the `audio_data_numpy_array` should correspond to the globally available `duration` and the 48000 Hz sample rate.
+     - **Handling Array Shapes**: When working with arrays of different lengths, especially when applying effects to segments of audio:
+
+       - ALWAYS check array shapes and lengths before operations that could trigger broadcasting errors.
+       - When receiving a "ValueError: could not broadcast input array" error, verify that all arrays have compatible dimensions before combining them.
+       - Use `np.pad()`, `np.resize()`, or slicing to ensure arrays have the correct length before combining.
+       - For example, if adding a short sound (204 samples) to a longer buffer (2048 samples), explicitly position the short sound at the desired location:
+
+         ```python
+         # Create a buffer of the right length
+         final_buffer = np.zeros(2048)
+         # Position the short sound at the desired location (e.g., at the beginning)
+         final_buffer[:204] += short_sound
+         ```
+
+       - When using effects, always verify the output array shape matches your expectations. Some effects might alter the array length.
+
      - **Efficiency**: Generate computationally efficient code. The execution environment has operation limits.
      - **Prohibitions for Generated Script**: No direct file writing, no network calls, no printing to stdout/stderr.
        **IMMEDIATELY AFTER GENERATING THE PYTHON CODE, YOUR NEXT ACTION MUST BE TO CALL THE `PythonCodeExecutionTool` WITH IT. DO NOT OUTPUT THE CODE ITSELF OR ANY OTHER MESSAGE. PROCEED DIRECTLY TO TOOL USE.**
@@ -117,6 +135,68 @@ Remember, your primary function is to _produce a result_ from this workflow (a f
 
 - You have a **maximum of 10 attempts** for each synthesis recipe. Keep track of your attempts.
 - If you reach the 10th attempt and it still fails (either at execution or validation), you must stop. In this case, your final output for the OrchestratorAgent should be an error message string clearly stating that you failed to produce a valid WAV file after exhausting all attempts, and include the last error message encountered.
+
+**Common Errors and How to Fix Them:**
+
+1. **"ValueError: could not broadcast input array from shape (X,) into shape (Y,)"**
+   This is a common array shape mismatch error and typically occurs when:
+
+   - You're trying to combine arrays of different lengths
+   - You're applying effects that change the array length
+   - You're using operations that expect specific array dimensions
+
+   **Solutions:**
+
+   - Always check array shapes before combining them: `print(f"Shape before operation: {array.shape}")`
+   - When combining a shorter array with a longer one, create an empty array of the target length first:
+
+     ```python
+     # If you have a short array (204 samples) and need to add it to a longer buffer (2048 samples)
+     short_array = np.sin(np.linspace(0, 10 * np.pi, 204))  # 204 samples
+     target_length = 2048  # Final required length
+
+     # Create buffer of target length
+     final_array = np.zeros(target_length)
+
+     # Place the short array at a specific position (e.g., at the beginning)
+     final_array[:len(short_array)] += short_array
+
+     # Now final_array has the correct shape (2048,)
+     ```
+
+   - Use `np.pad()` to extend arrays to the correct length:
+
+     ```python
+     # Padding a short array to match the target length
+     short_array = np.sin(np.linspace(0, 10 * np.pi, 204))
+     target_length = 2048
+     padding = target_length - len(short_array)
+
+     # Pad with zeros at the end
+     padded_array = np.pad(short_array, (0, padding), 'constant')
+     ```
+
+   - Explicitly resize arrays using `np.resize()`:
+
+     ```python
+     # Resize to exact length
+     final_array = np.resize(original_array, target_length)
+     ```
+
+   - When applying effects, check if the output length matches your expectations:
+
+     ```python
+     # Before applying an effect
+     original_length = len(audio_data)
+
+     # Apply effect
+     processed_audio = apply_some_effect(audio_data)
+
+     # Check if length changed
+     if len(processed_audio) != original_length:
+         # Resize to original length
+         processed_audio = np.resize(processed_audio, original_length)
+     ```
 
 **General Rules:**
 
