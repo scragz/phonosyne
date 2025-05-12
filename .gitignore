@@ -31,3 +31,4 @@ scraper/
 *.ipynb_checkpoints
 *.egg-info
 .clinerules/
+.github/
