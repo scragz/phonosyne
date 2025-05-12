@@ -63,7 +63,6 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
        - short_reverb
        - tremolo
        - vibrato
-       - feedback_network
      - **Modulation**: Describe modulation sources (e.g., "LFO," "random modulator," "envelope follower") and their targets and approximate intensity (e.g., "LFO subtly modulating oscillator pitch," "noise source modulating filter cutoff slightly").
      - **Panning**: Although the final output will be mono, if stereo imaging concepts are integral to the sound's design before a final mono sum (e.g., "sound starts panned left and moves to the right"), describe this.
      - **Mixing**: If multiple layers are present, give an indication of their relative levels or prominence.
