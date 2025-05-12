@@ -101,6 +101,8 @@ AUTHORIZED_IMPORTS_FOR_DSP = [
     "json",
     "phonosyne.dsp.effects",  # Allows generated code to 'import phonosyne.dsp.effects as fx' if ever needed for other reasons
     "phonosyne.dsp.effects.*",  # Allows generated code to 'from phonosyne.dsp.effects import some_utility' if ever needed
+    "phonosyne.dsp.effects.feedback_network",  # Added for MFN
+    "phonosyne.dsp.effects.feedback_network.*",  # Added for MFN utilities if any are exposed
     "phonosyne.settings",  # Added to allow generated scripts to import settings
 ]
 
@@ -188,6 +190,7 @@ def run_code(
         "short_reverb",
         "tremolo",
         "vibrato",
+        "feedback_network",  # Added MFN so apply_mfn can be loaded as a tool
     ]
 
     for effect_module_name in effects_to_load:

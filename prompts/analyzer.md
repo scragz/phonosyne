@@ -37,6 +37,7 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
    - This value MUST be a float and **exactly match the `duration_s` value** provided in your input JSON. Do not modify this duration. The system's target sample rate (e.g., 48000 Hz) is predetermined and should not be part of your output.
 
 3. **`description` (String - The Synthesis Recipe)**:
+
    - This is the most critical part of your output. It must be a detailed, natural-language set of instructions that a technically-oriented DSP compiler agent can interpret to generate Python code.
    - Clearly describe the synthesis process. This may include:
      - **Sound Sources/Layers**: Specify generator types (e.g., "sine wave oscillator," "white noise generator," "granular synthesis using short metallic grains," "FM synthesis with a 2:1 modulator-carrier ratio"). If multiple layers are involved, describe their order or interaction. Limit the number of layers to a maximum of 5.
@@ -62,6 +63,7 @@ Your entire output MUST be a **single-line UTF-8 JSON object string** and nothin
        - short_reverb
        - tremolo
        - vibrato
+       - feedback_network
      - **Modulation**: Describe modulation sources (e.g., "LFO," "random modulator," "envelope follower") and their targets and approximate intensity (e.g., "LFO subtly modulating oscillator pitch," "noise source modulating filter cutoff slightly").
      - **Panning**: Although the final output will be mono, if stereo imaging concepts are integral to the sound's design before a final mono sum (e.g., "sound starts panned left and moves to the right"), describe this.
      - **Mixing**: If multiple layers are present, give an indication of their relative levels or prominence.

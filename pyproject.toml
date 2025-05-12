@@ -29,6 +29,7 @@ dependencies = [
   "tenacity",
   "openai-agents",
   "librosa",
+  "numba",
 ]
 
 [project.optional-dependencies]

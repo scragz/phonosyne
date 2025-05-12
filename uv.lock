@@ -752,6 +752,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "librosa" },
+    { name = "numba" },
     { name = "numpy" },
     { name = "openai" },
     { name = "openai-agents" },
@@ -778,6 +779,7 @@ dev = [
 requires-dist = [
     { name = "librosa" },
     { name = "mypy", marker = "extra == 'dev'" },
+    { name = "numba" },
     { name = "numpy" },
     { name = "openai" },
     { name = "openai-agents" },

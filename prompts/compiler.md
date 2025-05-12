@@ -39,6 +39,7 @@ The target sample rate for all generated audio is **48000 Hz**.
      - If failed (e.g., script error, wrong return type): An error message string.
 
 2. **`AudioValidationTool`**:
+
    - **Purpose**: Validates a specified `.wav` file against technical criteria (correct duration within tolerance, sample rate, bit depth, mono channel, peak audio level).
    - **Input Arguments for this Tool**:
      - `file_path: str` (The path to the temporary `.wav` file, typically the output from `PythonCodeExecutionTool`).
@@ -78,6 +79,7 @@ For each attempt (up to 10):
        - `apply_distortion(audio_data: np.ndarray, drive: float = 0.5, mix: float = 1.0)`
        - `apply_dub_echo(audio_data: np.ndarray, echo_time_s: float = 0.7, feedback: float = 0.65, mix: float = 0.6, damping_factor: float = 0.3)`
        - `apply_echo(audio_data: np.ndarray, echo_time_s: float = 0.5, feedback: float = 0.4, mix: float = 0.5)`
+       - `apply_feedback_network(audio_data: np.ndarray, graph_json: str, sample_rate: int, block_size: int = 256, use_numba: bool = True, rms_window_ms: float = 50.0, rms_threshold_db: float = -90.0, max_duration_s: float = 30.0, gain_adjustment_db: float = 0.0) -> np.ndarray`
        - `apply_flanger(audio_data: np.ndarray, rate_hz: float = 0.2, depth_ms: float = 1.5, mix: float = 0.5, feedback: float = 0.7, stereo_spread_ms: float = 0.2)`
        - `apply_fuzz(audio_data: np.ndarray, fuzz_amount: float = 0.8, gain_db: float = 0.0, mix: float = 1.0)`
        - `apply_long_reverb(audio_data: np.ndarray, decay_time_s: float = 2.0, mix: float = 0.4, diffusion: float = 0.7)`
@@ -89,7 +91,7 @@ For each attempt (up to 10):
        - `apply_short_reverb(audio_data: np.ndarray, decay_time_s: float = 0.2, mix: float = 0.3)`
        - `apply_tremolo(audio_data: np.ndarray, rate_hz: float = 5.0, depth: float = 0.8, lfo_shape: str = "sine", stereo_phase_deg: float = 0.0)`
        - `apply_vibrato(audio_data: np.ndarray, rate_hz: float = 6.0, depth_ms: float = 1.0, stereo_phase_deg: float = 0.0)`
-     - **MANDATORY SCRIPT RETURN VALUE**: The Python script\'s final executable line **MUST** evaluate to a single `numpy.ndarray` representing the mono audio data. For example: `final_mono_array`. The `PythonCodeExecutionTool` will handle using `settings.DEFAULT_SR` when creating the WAV file.
+     - **MANDATORY SCRIPT RETURN VALUE**: The Python script's final executable line **MUST** evaluate to a single `numpy.ndarray` representing the mono audio data. For example: `final_mono_array`. The `PythonCodeExecutionTool` will handle using `settings.DEFAULT_SR` when creating the WAV file.
      - **Normalization & Clipping**: Before returning the `audio_data_numpy_array`, ensure its values are strictly within the range `[-1.0, 1.0]`. Implement normalization (e.g., to a target peak like -1.0 dBFS) or clipping if necessary to meet this requirement. This is a common validation failure point.
      - **Duration**: The length of the `audio_data_numpy_array` should correspond to the globally available `duration` and the 48000 Hz sample rate.
      - **Handling Array Shapes**: When working with arrays of different lengths, especially when applying effects to segments of audio:

@@ -6,6 +6,7 @@ from .delay import apply_delay
 from .distortion import apply_distortion
 from .dub_echo import apply_dub_echo
 from .echo import apply_echo
+from .feedback_network import MFN, MFNGraph, apply_feedback_network
 from .flanger import apply_flanger
 from .fuzz import apply_fuzz
 from .long_reverb import apply_long_reverb
@@ -37,4 +38,5 @@ __all__ = [
     "apply_fuzz",
     "apply_rainbow_machine",
     "apply_particle",
+    "apply_feedback_network",
 ]

@@ -24,7 +24,7 @@ from agents import (
 )
 from openai import AsyncOpenAI, OpenAIError
 
-from . import settings  # Import the settings module
+from . import settings
 
 # Import the OrchestratorAgent from its location
 # Assuming it's in .agents.orchestrator relative to the phonosyne package root
@@ -167,7 +167,7 @@ async def run_prompt(
         PhonosyneError: For other Phonosyne-specific errors
         Exception: For other unexpected errors
     """
-    from .agents.orchestrator import OrchestratorAgent  # Import here
+    from .agents.orchestrator import OrchestratorAgent
 
     orchestrator_agent = OrchestratorAgent(**kwargs)
 

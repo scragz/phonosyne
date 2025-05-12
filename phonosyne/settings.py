@@ -39,6 +39,9 @@ DEFAULT_SR: int = 48_000  # Default sample rate in Hz
 TARGET_PEAK_DBFS: float = -0.1  # Target peak level in dBFS for normalization
 DURATION_TOLERANCE_S: float = 2  # Allowed duration tolerance in seconds
 BIT_DEPTH: int = 32  # Bit depth for output WAV files (32-bit float)
+DEFAULT_AUDIO_BLOCK_SIZE: int = (
+    256  # Default block size for block-based audio processing
+)
 SILENCE_THRESHOLD_LINEAR: float = 10 ** (
     -100 / 20
 )  # Linear threshold for silence detection
