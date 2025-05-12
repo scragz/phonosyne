@@ -48,7 +48,7 @@ DEFAULT_OUT_DIR: Path = Path("./output").absolute()
 PROMPTS_DIR: Path = Path("./prompts")
 
 # Agent & Compiler Settings
-MAX_TURNS: int = 50
+MAX_TURNS: int = 100
 MAX_COMPILER_ITERATIONS: int = (
     10  # Maximum attempts for the CompilerAgent to generate valid code
 )

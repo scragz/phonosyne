@@ -44,11 +44,11 @@ try:
     from phonosyne import settings as app_settings
 
     # Assuming BASE_DIR is a Path object or string representing the project root
-    PROJECT_ROOT = Path(app_settings.BASE_DIR).resolve()
-    logger.info(f"Using PROJECT_ROOT from settings.BASE_DIR: {PROJECT_ROOT}")
+    PROJECT_ROOT = Path(app_settings.DEFAULT_OUT_DIR).resolve()
+    logger.info(f"Using PROJECT_ROOT from settings.DEFAULT_OUT_DIR: {PROJECT_ROOT}")
 except (ImportError, AttributeError, TypeError) as e:
     logger.warning(
-        f"Could not import or use app_settings.BASE_DIR (Error: {e}). "
+        f"Could not import or use app_settings.DEFAULT_OUT_DIR (Error: {e}). "
         "Falling back to deriving project root from tools.py location."
     )
     # tools.py is in phonosyne/tools.py, so parent.parent should be project root
