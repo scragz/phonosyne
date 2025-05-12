@@ -26,6 +26,8 @@ from pathlib import Path
 
 from agents import function_tool
 
+from phonosyne import settings as app_settings
+
 # Import Pydantic models from existing schemas
 from phonosyne.agents.schemas import (  # Add other schemas as they become necessary for tool inputs/outputs
     AnalyzerOutput,
@@ -40,22 +42,7 @@ from phonosyne.utils.exec_env import run_code as existing_run_code
 logger = logging.getLogger(__name__)  # Added
 
 # Determine Project Root and Output Directory for executed code
-try:
-    from phonosyne import settings as app_settings
-
-    # Assuming BASE_DIR is a Path object or string representing the project root
-    PROJECT_ROOT = Path(app_settings.DEFAULT_OUT_DIR).resolve()
-    logger.info(f"Using PROJECT_ROOT from settings.DEFAULT_OUT_DIR: {PROJECT_ROOT}")
-except (ImportError, AttributeError, TypeError) as e:
-    logger.warning(
-        f"Could not import or use app_settings.DEFAULT_OUT_DIR (Error: {e}). "
-        "Falling back to deriving project root from tools.py location."
-    )
-    # tools.py is in phonosyne/tools.py, so parent.parent should be project root
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
-    logger.info(f"Using fallback PROJECT_ROOT: {PROJECT_ROOT}")
-
-EXEC_ENV_OUTPUT_DIR = PROJECT_ROOT / "output" / "exec_env_output"
+EXEC_ENV_OUTPUT_DIR = Path(app_settings.DEFAULT_OUT_DIR).resolve() / "exec_env_output"
 logger.info(f"Execution environment output directory set to: {EXEC_ENV_OUTPUT_DIR}")
 
 
