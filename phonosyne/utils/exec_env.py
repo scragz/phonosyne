@@ -28,6 +28,7 @@ import logging
 import math
 import random
 import shutil
+import tempfile  # Add this import
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -146,259 +147,250 @@ def run_code(
     """
     logger.info(f"Executing code for target output: {output_filename}")
 
-    # Determine the final directory for the output WAV.
-    # exec_env_output is a persistent temporary holding place.
-    # The orchestrator should move files from here to the final brief-specific output dir.
     persistent_temp_dir = settings.DEFAULT_OUT_DIR / "exec_env_output"
-    # Ensure the path is absolute to avoid any resolution issues
     persistent_temp_dir = persistent_temp_dir.absolute()
     persistent_temp_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Writing output to directory: {persistent_temp_dir}")
+    logger.info(f"Target output directory for WAV: {persistent_temp_dir}")
 
-    # Extract just the filename without any path components
-    # This ensures we don't accidentally create nested paths
-    safe_filename = Path(output_filename).name
-    if not safe_filename or safe_filename in (".", ".."):
-        safe_filename = "default_dsp_output.wav"
-        logger.warning(
-            f"Original output_filename '{output_filename}' was invalid/empty, using '{safe_filename}'"
-        )
-
-    # Create a Path object for the final intended output
-    actual_wav_path = persistent_temp_dir / safe_filename
-    logger.info(f"Full output path will be: {actual_wav_path}")
-
-    dsp_effect_tools = {}
-    # List of effect names (module names) that should have an apply_<effect_name> function
-    effects_to_load = [
-        "autowah",
-        "chorus",
-        "compressor",
-        "delay",
-        "distortion",
-        "dub_echo",
-        "echo",
-        "flanger",
-        "fuzz",
-        "long_reverb",
-        "noise_gate",
-        "overdrive",
-        "particle",
-        "phaser",
-        "rainbow_machine",
-        "short_reverb",
-        "tremolo",
-        "vibrato",
-        "feedback_network",  # Added MFN so apply_mfn can be loaded as a tool
-    ]
-
-    for effect_module_name in effects_to_load:
-        function_name = f"apply_{effect_module_name}"
-        try:
-            # Dynamically import the module and get the function
-            module = __import__(
-                f"phonosyne.dsp.effects.{effect_module_name}",
-                fromlist=[function_name],
-            )
-            func = getattr(module, function_name)
-            dsp_effect_tools[function_name] = func
-        except ImportError as e:
-            logger.error(
-                f"Failed to import {function_name} from phonosyne.dsp.effects.{effect_module_name}: {e}"
-            )
-        except AttributeError as e:
-            logger.error(
-                f"Function {function_name} not found in phonosyne.dsp.effects.{effect_module_name}: {e}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error loading effect {effect_module_name} ({function_name}): {e}"
-            )
-
-    executor = LocalPythonExecutor(
-        additional_authorized_imports=AUTHORIZED_IMPORTS_FOR_DSP
-    )
-
-    # Prepare modules to be sent as variables
-    modules_as_variables = {
-        "np": np,
-        "numpy": np,  # Allow use of 'numpy.array' if AI generates that
-        "scipy": scipy,
-        "math": math,
-        "random": random,
-        "array": array,  # The array module
-        "json": json,  # json module itself
-        "settings": settings,  # Make the phonosyne.settings module available globally
-    }
-
-    # Prepare functions/callables to be sent as tools
-    functions_as_tools = {
-        "hash": hash,  # Built-in hash function
-        # Add other specific, safe built-ins or utilities if needed
-    }
-    functions_as_tools.update(
-        dsp_effect_tools
-    )  # Add all dynamically loaded apply_... functions
-
-    # Combine recipe-specific variables with modules for send_variables
-    all_variables_to_send = {
-        "output_filename": output_filename,
-        "description": recipe_description,
-        "duration": recipe_duration,
-        "recipe_json": recipe_json_str,  # Make the JSON string available as 'recipe_json'
-    }
-    all_variables_to_send.update(modules_as_variables)
-
-    executor.send_variables(all_variables_to_send)
-    executor.send_tools(functions_as_tools)
+    original_tempdir = tempfile.tempdir
+    tempfile.tempdir = str(persistent_temp_dir)
+    logger.info(f"Temporarily set tempfile.tempdir to: {tempfile.tempdir}")
 
     try:
-        logger.debug(
-            f"Attempting to execute code for {output_filename}:\\n---\\n{code}\\n---"
-        )
-        # LocalPythonExecutor.__call__ returns a 3-tuple: (output, logs, is_final_answer)
-        # The 'output' (here, `code_output`) is what the LLM-generated code itself returns.
-        code_output, logs, is_final_answer = executor(
-            code
-        )  # This is the actual execution call
-        logger.debug(
-            f"LocalPythonExecutor raw output (result of executed code) for {output_filename}: {code_output!r}"
-        )
-        logger.debug(f"LocalPythonExecutor logs for {output_filename}: {logs}")
-
-        if (
-            is_final_answer
-        ):  # Phonosyne doesn't use final_answer concept from smolagents here
+        # Extract just the filename without any path components
+        # This ensures we don't accidentally create nested paths
+        safe_filename = Path(output_filename).name
+        if not safe_filename or safe_filename in (".", ".."):
+            safe_filename = "default_dsp_output.wav"
             logger.warning(
-                "LocalPythonExecutor indicated final_answer, which is not expected in this context."
+                f"Original output_filename '{output_filename}' was invalid/empty, using '{safe_filename}'"
             )
 
-        if code_output is None:
-            raise CodeExecutionError(
-                "Executed code returned None. "
-                "Expected a (numpy.ndarray, int) tuple for (audio_data, sample_rate)."
-            )
+        # Create a Path object for the final intended output
+        actual_wav_path = persistent_temp_dir / safe_filename
+        logger.info(f"Full output path will be: {actual_wav_path}")
 
-        audio_data: np.ndarray | None = None
-        sample_rate: int | None = None
+        dsp_effect_tools = {}
+        # List of effect names (module names) that should have an apply_<effect_name> function
+        effects_to_load = [
+            "autowah",
+            "chorus",
+            "compressor",
+            "delay",
+            "distortion",
+            "dub_echo",
+            "echo",
+            "flanger",
+            "fuzz",
+            "long_reverb",
+            "noise_gate",
+            "overdrive",
+            "particle",
+            "phaser",
+            "rainbow_machine",
+            "short_reverb",
+            "tremolo",
+            "vibrato",
+            "feedback_network",  # Added MFN so apply_mfn can be loaded as a tool
+        ]
 
-        # Primary expectation: (numpy.ndarray, int) tuple as per overview.md
-        if isinstance(code_output, tuple) and len(code_output) == 2:
-            potential_audio_data, potential_sample_rate = code_output
-            if not isinstance(potential_audio_data, np.ndarray):
-                raise CodeExecutionError(
-                    "First element of the tuple returned by executed code is not a numpy.ndarray."
-                    f" Got: {type(potential_audio_data)}"
+        for effect_module_name in effects_to_load:
+            function_name = f"apply_{effect_module_name}"
+            try:
+                # Dynamically import the module and get the function
+                module = __import__(
+                    f"phonosyne.dsp.effects.{effect_module_name}",
+                    fromlist=[function_name],
                 )
-            if not isinstance(potential_sample_rate, int):
-                raise CodeExecutionError(
-                    "Second element of the tuple returned by executed code is not an int (sample_rate)."
-                    f" Got: {type(potential_sample_rate)}"
+                func = getattr(module, function_name)
+                dsp_effect_tools[function_name] = func
+            except ImportError as e:
+                logger.error(
+                    f"Failed to import {function_name} from phonosyne.dsp.effects.{effect_module_name}: {e}"
                 )
-            audio_data = potential_audio_data
-            sample_rate = potential_sample_rate
-            logger.info(
-                f"Executed code for {output_filename} returned (audio_data, sample_rate) tuple. "
-                f"Audio data shape: {audio_data.shape}, Sample rate: {sample_rate} Hz."
-            )
-        elif isinstance(
-            code_output, np.ndarray
-        ):  # Fallback for legacy/incorrect direct ndarray return
-            audio_data = code_output
-            sample_rate = settings.DEFAULT_SR  # Use global default sample rate
-            logger.warning(
-                f"Executed code for {output_filename} returned a direct numpy.ndarray instead of the expected (audio_data, sample_rate) tuple. "
-                f"Using default sample rate: {sample_rate} Hz. Audio data shape: {audio_data.shape}."
-            )
-        else:  # Neither None, nor tuple, nor ndarray
-            raise CodeExecutionError(
-                "Executed code did not return the expected (numpy.ndarray, int) tuple or a direct numpy.ndarray. "
-                f"Got type: {type(code_output)}, Value: {code_output!r}"
-            )
+            except AttributeError as e:
+                logger.error(
+                    f"Function {function_name} not found in phonosyne.dsp.effects.{effect_module_name}: {e}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error loading effect {effect_module_name} ({function_name}): {e}"
+                )
 
-        # Ensure audio_data and sample_rate are valid before proceeding (should be caught above by checks)
-        if (
-            audio_data is None or sample_rate is None
-        ):  # This should ideally not be reached if logic above is correct
-            raise CodeExecutionError(
-                "Internal error: audio_data or sample_rate not set after processing code output. This indicates a flaw in run_code's logic."
-            )
-
-        logger.info(
-            f"Processed output for {output_filename}. Audio data shape: {audio_data.shape}, "
-            f"Sample rate: {sample_rate} Hz."
+        executor = LocalPythonExecutor(
+            additional_authorized_imports=AUTHORIZED_IMPORTS_FOR_DSP
         )
-        # Save the returned audio data to the WAV file
+
+        # Prepare modules to be sent as variables
+        modules_as_variables = {
+            "np": np,
+            "numpy": np,  # Allow use of 'numpy.array' if AI generates that
+            "scipy": scipy,
+            "math": math,
+            "random": random,
+            "array": array,  # The array module
+            "json": json,  # json module itself
+            "settings": settings,  # Make the phonosyne.settings module available globally
+        }
+
+        # Prepare functions/callables to be sent as tools
+        functions_as_tools = {
+            "hash": hash,  # Built-in hash function
+            # Add other specific, safe built-ins or utilities if needed
+        }
+        functions_as_tools.update(
+            dsp_effect_tools
+        )  # Add all dynamically loaded apply_... functions
+
+        # Combine recipe-specific variables with modules for send_variables
+        all_variables_to_send = {
+            "output_filename": output_filename,
+            "description": recipe_description,
+            "duration": recipe_duration,
+            "recipe_json": recipe_json_str,  # Make the JSON string available as 'recipe_json'
+        }
+        all_variables_to_send.update(modules_as_variables)
+
+        executor.send_variables(all_variables_to_send)
+        executor.send_tools(functions_as_tools)
+
         try:
-            # Ensure directory exists
-            actual_wav_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Log more details for debugging
-            logger.info(
-                f"Saving audio data (shape: {audio_data.shape}) to {actual_wav_path} with sample rate {sample_rate}"
+            logger.debug(
+                f"Attempting to execute code for {output_filename}:\\n---\\n{code}\\n---"
             )
+            # LocalPythonExecutor.__call__ returns a 3-tuple: (output, logs, is_final_answer)
+            # The 'output' (here, `code_output`) is what the LLM-generated code itself returns.
+            code_output, logs, is_final_answer = executor(
+                code
+            )  # This is the actual execution call
+            logger.debug(
+                f"LocalPythonExecutor raw output (result of executed code) for {output_filename}: {code_output!r}"
+            )
+            logger.debug(f"LocalPythonExecutor logs for {output_filename}: {logs}")
 
-            # Write the file
-            sf.write(
-                actual_wav_path, audio_data, sample_rate, subtype="FLOAT"
-            )  # Defaulting to 32-bit float
+            if (
+                is_final_answer
+            ):  # Phonosyne doesn't use final_answer concept from smolagents here
+                logger.warning(
+                    "LocalPythonExecutor indicated final_answer, which is not expected in this context."
+                )
 
-            # Verify file was created
-            if actual_wav_path.exists() and actual_wav_path.is_file():
+            if code_output is None:
+                raise CodeExecutionError(
+                    "Executed code returned None. "
+                    "Expected a (numpy.ndarray, int) tuple for (audio_data, sample_rate)."
+                )
+
+            audio_data: np.ndarray | None = None
+            sample_rate: int | None = None
+
+            # Primary expectation: (numpy.ndarray, int) tuple as per overview.md
+            if isinstance(code_output, tuple) and len(code_output) == 2:
+                potential_audio_data, potential_sample_rate = code_output
+                if not isinstance(potential_audio_data, np.ndarray):
+                    raise CodeExecutionError(
+                        "First element of the tuple returned by executed code is not a numpy.ndarray."
+                        f" Got: {type(potential_audio_data)}"
+                    )
+                if not isinstance(potential_sample_rate, int):
+                    raise CodeExecutionError(
+                        "Second element of the tuple returned by executed code is not an int (sample_rate)."
+                        f" Got: {type(potential_sample_rate)}"
+                    )
+                audio_data = potential_audio_data
+                sample_rate = potential_sample_rate
+                logger.info(
+                    f"Executed code for {output_filename} returned (audio_data, sample_rate) tuple. "
+                    f"Audio data shape: {audio_data.shape}, Sample rate: {sample_rate} Hz."
+                )
+            elif isinstance(
+                code_output, np.ndarray
+            ):  # Fallback for legacy/incorrect direct ndarray return
+                audio_data = code_output
+                sample_rate = settings.DEFAULT_SR  # Use global default sample rate
+                logger.warning(
+                    f"Executed code for {output_filename} returned a direct numpy.ndarray instead of the expected (audio_data, sample_rate) tuple. "
+                    f"Using default sample rate: {sample_rate} Hz. Audio data shape: {audio_data.shape}."
+                )
+            else:  # Neither None, nor tuple, nor ndarray
+                raise CodeExecutionError(
+                    "Executed code did not return the expected (numpy.ndarray, int) tuple or a direct numpy.ndarray. "
+                    f"Got type: {type(code_output)}, Value: {code_output!r}"
+                )
+
+            # Ensure audio_data and sample_rate are valid before proceeding (should be caught above by checks)
+            if (
+                audio_data is None or sample_rate is None
+            ):  # This should ideally not be reached if logic above is correct
+                raise CodeExecutionError(
+                    "Internal error: audio_data or sample_rate not set after processing code output. This indicates a flaw in run_code's logic."
+                )
+
+            logger.info(
+                f"Processed output for {output_filename}. Audio data shape: {audio_data.shape}, "
+                f"Sample rate: {sample_rate} Hz."
+            )
+            # Save the returned audio data to the WAV file
+            try:
+                # Ensure directory exists
+                actual_wav_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Log more details for debugging
+                logger.info(
+                    f"Saving audio data (shape: {audio_data.shape}) to {actual_wav_path} with sample rate {sample_rate}"
+                )
+
+                # Write the file
+                sf.write(
+                    actual_wav_path, audio_data, sample_rate, subtype="FLOAT"
+                )  # Defaulting to 32-bit float
+
+                # Verify file was created
+                if not actual_wav_path.exists() or not actual_wav_path.is_file():
+                    # This case should ideally be caught by an exception from sf.write if it fails,
+                    # but an explicit check is good.
+                    logger.error(
+                        f"sf.write apparently succeeded but the file was not found at {actual_wav_path}"
+                    )
+                    raise FileNotFoundError(
+                        f"Failed to create or verify WAV file at {actual_wav_path}"
+                    )
+
                 logger.info(
                     f"Audio data successfully saved to {actual_wav_path} (Size: {actual_wav_path.stat().st_size} bytes)"
                 )
-            else:
-                # Check if the file might have been created in the system temp directory
-                tmp_path = None
-                if "/tmp/" in str(output_filename) or "/private/tmp/" in str(
-                    output_filename
-                ):
-                    tmp_path = Path(output_filename)
-                    if tmp_path.exists() and tmp_path.is_file():
-                        logger.warning(
-                            f"File was created in system temp directory: {tmp_path}"
-                        )
-                        try:
-                            # Copy file from temp to the intended location
-                            shutil.copy2(str(tmp_path), str(actual_wav_path))
-                            logger.info(
-                                f"Successfully copied from {tmp_path} to {actual_wav_path}"
-                            )
-                            # Update the path to be returned
-                            tmp_path.unlink()
-                            logger.info(f"Removed original temp file: {tmp_path}")
-                        except Exception as copy_err:
-                            logger.error(
-                                f"Error copying from temp dir: {copy_err}",
-                                exc_info=True,
-                            )
-                            raise FileNotFoundError(
-                                f"Failed to copy temp file from {tmp_path} to {actual_wav_path}: {copy_err}"
-                            )
-                    else:
-                        tmp_path = None
 
-                if not tmp_path:
-                    raise FileNotFoundError(
-                        f"Failed to create WAV file at {actual_wav_path}"
-                    )
-        except Exception as e:
-            logger.error(f"Error saving audio data to file: {e}", exc_info=True)
-            raise CodeExecutionError(f"Failed to save WAV file: {e}") from e
+            except Exception as e:
+                logger.error(
+                    f"Error saving audio data to file {actual_wav_path}: {e}",
+                    exc_info=True,
+                )
+                raise CodeExecutionError(
+                    f"Failed to save WAV file to {actual_wav_path}: {e}"
+                ) from e
 
-    except InterpreterError as e:  # Specific error from LocalPythonExecutor
-        logger.error(f"Error during code execution: {e}")
-        raise CodeExecutionError(f"Execution failed: {e}") from e
-    except Exception as e:  # Catch other errors like soundfile write issues
-        logger.error(f"Error processing result from execution: {e}", exc_info=True)
-        raise CodeExecutionError(f"Failed to process or save audio: {e}") from e
+        except InterpreterError as e:  # Specific error from LocalPythonExecutor
+            logger.error(f"Error during code execution: {e}")
+            raise CodeExecutionError(f"Execution failed: {e}") from e
+        except (
+            CodeExecutionError
+        ):  # Re-raise CodeExecutionErrors from saving block or other explicit raises
+            raise
+        except Exception as e:  # Catch other unexpected errors
+            logger.error(f"Unexpected error in run_code: {e}", exc_info=True)
+            raise CodeExecutionError(f"Unexpected failure in run_code: {e}") from e
+    finally:
+        tempfile.tempdir = original_tempdir
+        logger.info(
+            f"Restored tempfile.tempdir to: {original_tempdir if original_tempdir else 'system default'}"
+        )
 
-    # Final check for the output file existence
+    # Final check for the output file existence (belt-and-suspenders)
     if not actual_wav_path.exists() or not actual_wav_path.is_file():
+        # This should ideally not be reached if the checks above are comprehensive
         raise FileNotFoundError(
-            f"Generated .wav file not found at final path: {actual_wav_path}."
+            f"Generated .wav file not found at final path after all checks: {actual_wav_path}."
         )
 
     logger.info(f"Successfully produced WAV file: {actual_wav_path}")

@@ -117,7 +117,7 @@ _Workers operate independently; synchronize writes to `run.samples` and `run.err
 - **DesignerAgentTool** failure → abort entire run.
 - **AnalyzerAgentTool** failure after 10 attempts → `failed_analysis`.
 - **CompilerAgentTool** failure after 10 attempts → `failed_compilation`.
-- **FileMoverTool** failure → `failed_file_move` (sample counted as failed).
+- **FileMoverTool** failure → rerun **CompilerAgentTool** → failure after 10 attempts → `failed_file_move`.
 - **ManifestGeneratorTool** failure → run fails (`run.completed` remains false).
 
 Do **not** exceed the specified retry counts. Log every error message encountered.

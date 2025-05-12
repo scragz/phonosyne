@@ -94,9 +94,13 @@ class CompilerAgent(Agent):
             validate_audio_file,
         ]
 
+        logger.info("Output directory for CompilerAgent: %s", settings.DEFAULT_OUT_DIR)
+
+        instructions = f"{COMPILER_INSTRUCTIONS}\n\n## Output Directory\n\nOutput files to be saved in: {settings.DEFAULT_OUT_DIR}\n"
+
         super().__init__(
             name=agent_name,
-            instructions=COMPILER_INSTRUCTIONS,
+            instructions=instructions,
             model=model_arg,  # Pass the model name or Model instance
             tools=agent_tools,
             output_type=str,  # Expects a string (file path) as the final output

@@ -280,50 +280,41 @@ async def move_file(source_path: str, target_path: str) -> str:
     """
     Moves a file from a source path to a target path.
     Creates the target directory if it doesn't exist.
+    The source_path MUST be an absolute path to an existing file.
 
     Args:
-        source_path: The path of the file to move.
-        target_path: The destination path for the file.
+        source_path: The absolute path of the file to move.
+        target_path: The absolute destination path for the file.
 
     Returns:
         A success message with the target path, or an error message string.
     """
     try:
-        # Use resolve() to get absolute paths
-        source = Path(source_path).resolve()
-        target = Path(target_path).resolve()
+        # Ensure paths are absolute. If not, resolve them.
+        # Path.resolve() will make a relative path absolute from the current working directory.
+        # If the path is already absolute, resolve() will normalize it (e.g., remove '..').
+        source = Path(source_path)
+        if not source.is_absolute():
+            logger.warning(
+                f"move_file: Received relative source_path '{source_path}'. Resolving it to an absolute path."
+            )
+            source = source.resolve()
 
-        # Diagnostic logging - will appear in the agent's output
-        print(f"Moving file from {source} to {target}")
+        target = Path(target_path)
+        if not target.is_absolute():
+            logger.warning(
+                f"move_file: Received relative target_path '{target_path}'. Resolving it to an absolute path."
+            )
+            target = target.resolve()
 
-        # Check if the file exists at the provided source path
+        logger.info(f"Attempting to move file from (resolved absolute): {source}")
+        logger.info(f"Attempting to move file to   (resolved absolute): {target}")
+
+        # Critical Check: Source file must exist and be a file.
         if not source.exists():
-            # Check if this might be a file in the temporary directory
-            alternative_sources = []
-
-            # Case 1: If source path is already in /tmp/ or /private/tmp/, no need for alternatives
-            if "/tmp/" in str(source_path) or "/private/tmp/" in str(source_path):
-                pass  # We'll just return the error below
-            else:
-                # Case 2: Check if there's a file with the same name in /tmp/
-                tmp_path_1 = Path("/tmp") / source.name
-                if tmp_path_1.exists() and tmp_path_1.is_file():
-                    alternative_sources.append(tmp_path_1)
-
-                # Case 3: Check if there's a file with the same name in /private/tmp/
-                tmp_path_2 = Path("/private/tmp") / source.name
-                if tmp_path_2.exists() and tmp_path_2.is_file():
-                    alternative_sources.append(tmp_path_2)
-
-            if alternative_sources:
-                # Use the first found alternative
-                source = alternative_sources[0]
-                print(f"Found source file at alternative location: {source}")
-            else:
-                return f"Error: Source file does not exist at {source} (from {source_path})"
-
+            return f"Error: Source file does not exist at the specified absolute path: {source} (original input: '{source_path}')"
         if not source.is_file():
-            return f"Error: Source path is not a file: {source} (from {source_path})"
+            return f"Error: Source path is not a file: {source} (original input: '{source_path}')"
 
         # Ensure target directory exists
         target_parent_dir = target.parent
