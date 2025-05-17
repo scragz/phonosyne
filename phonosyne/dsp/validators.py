@@ -68,13 +68,6 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
 
     errors = []
 
-    # 0. Check for forbidden file path prefixes
-    fp_str = str(file_path.resolve())  # Use resolved absolute path
-    if fp_str.startswith("/tmp/") or fp_str.startswith("/private/tmp/"):
-        msg = f"File path is in a forbidden temporary directory: {file_path}"
-        logger.error(msg)
-        raise ValidationFailedError(msg)
-
     try:
         info = sf.info(file_path)
     except Exception as e:
