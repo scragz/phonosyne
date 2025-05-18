@@ -126,6 +126,7 @@ def run_code(
     recipe_description: str = "",
     recipe_duration: float = 15.0,
     recipe_json_str: str = "",
+    effect_name: str | None = None,
 ) -> Path:
     """
     Executes Python code, saves the output as a .wav file, and returns its path.
@@ -246,6 +247,7 @@ def run_code(
         # Combine recipe-specific variables with modules for send_variables
         all_variables_to_send = {
             "output_filename": output_filename,
+            "effect_name": effect_name or "default_effect",
             "description": recipe_description,
             "duration": recipe_duration,
             "recipe_json": recipe_json_str,  # Make the JSON string available as 'recipe_json'

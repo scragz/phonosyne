@@ -76,6 +76,7 @@ async def execute_python_dsp_code(
             logger.error(err_msg)
             return err_msg
 
+        effect_name = recipe_data.get("effect_name")
         description = recipe_data.get("description")
         duration = recipe_data.get("duration")
         if description is None or duration is None:
@@ -128,6 +129,7 @@ async def execute_python_dsp_code(
             recipe_description=str(description),
             recipe_duration=float(duration),
             recipe_json_str=recipe_json,
+            effect_name=effect_name,
         )
 
         actually_written_path = Path(returned_path_str_from_exec).resolve()
