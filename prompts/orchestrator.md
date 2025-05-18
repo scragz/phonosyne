@@ -25,7 +25,7 @@ Any other exit path is a failure. Never announce success, return “OK,” or yi
 > (`recipe.effect_name` must be slugified but human-readable starting with L1.1, L1.2, A1, etc., e.g. `L3.2_whispering_willows.wav`).
 
 > **Output directory rule**
-> The `run.output_dir` is created as `./output/<slugified brief[:10 first 20 characters]>/` to ensure uniqueness and avoid collisions without hitting the filesystem limits.
+> The `run.output_dir` is created as `./output/<slugified brief[:10 first 30 characters]>/` to ensure uniqueness and avoid collisions without hitting the filesystem limits.
 
 ---
 
@@ -34,7 +34,7 @@ Any other exit path is a failure. Never announce success, return “OK,” or yi
 ```json
 run = {
   "id": "<slug>",
-  "output_dir": "./output/<slug[:20]>/",
+  "output_dir": "./output/<slug[:30]>/",
   "plan": null,
   "samples": [],          # 18 entries created during processing
   "errors": [],
