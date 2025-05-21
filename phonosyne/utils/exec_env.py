@@ -22,24 +22,13 @@ Key features:
 - The system verifies the file exists after execution.
 """
 
-import array
-import importlib
 import json
 import logging
-import math
-import random
-import shutil
+import subprocess
 import tempfile
-import time
-import traceback
 from pathlib import Path
-from typing import Any, Dict, Tuple
 
 import numpy as np
-import scipy
-import soundfile as sf
-import supriya
-from smolagents.local_python_executor import InterpreterError, LocalPythonExecutor
 
 from phonosyne import settings
 
@@ -86,34 +75,6 @@ except Exception as e:
         f"An unexpected error occurred while trying to monkey-patch scipy.sparse._coo.upcast: {e}",
         exc_info=True,
     )
-# <<< END MONKEY PATCH FOR scipy.sparse.coo.upcast >>>
-
-# No restricted globals needed as we only use LocalPythonExecutor
-
-# Authorized imports for LocalPythonExecutor
-# Based on compiler.md: numpy, scipy.signal, soundfile as sf, plus random, math
-# os, tempfile, time, json, sys are generally unsafe for LLM code.
-# LocalPythonExecutor has its own defaults, we add to them or specify a full list.
-# Common safe DSP modules:
-AUTHORIZED_IMPORTS_FOR_DSP = [
-    "supriya",
-    "supriya.*",
-    "numpy",  # For numerical arrays and operations
-    "numpy.*",
-    "math",  # Basic math functions
-    "random",  # For random number generation
-    "time",  # For time-related functions, scheduling
-    "time.*",
-    "traceback",  # For detailed error reporting
-    "pathlib",  # For object-oriented path manipulation
-    "soundfile",  # For Python-side audio file I/O to/from numpy arrays
-    "soundfile.*",
-    "scipy",  # For advanced Python-side signal processing
-    "scipy.*",
-    "phonosyne.dsp.effects",
-    "phonosyne.dsp.effects.*",
-    "phonosyne.settings",
-]
 
 
 class CodeExecutionError(Exception):
@@ -128,218 +89,125 @@ class SecurityException(CodeExecutionError):  # Keep for compatibility if used e
     pass
 
 
-def run_code(
+def run_supercollider_code(
     code: str,
     output_filename: str,
     recipe_duration: float = 15.0,
     effect_name: str | None = None,
+    sclang_path: str = "sclang",
 ) -> Path:
     """
-    Executes Python code that writes a .wav file and returns its path.
+    Executes SuperCollider code that writes a .wav file and returns its path.
 
-    Uses LocalPythonExecutor to safely execute generated code. The code is expected to
-    write audio data directly to a file at the specified output_filename. This function
-    verifies the file exists after execution and returns its path.
+    The SuperCollider code is expected to handle its own server interaction (e.g.,
+    booting if necessary, though for now a running server is assumed), synthesis,
+    and writing audio data directly to a file at the specified output_filename.
+    This function writes the code to a temporary .scd file, executes it using sclang,
+    verifies the output file exists, and returns its path.
 
     Args:
-        code: The Python code string to execute.
-        output_filename: Desired name for the output .wav file (e.g., "sample_01.wav").
+        code: The SuperCollider code string to execute.
+        output_filename: Absolute path for the output .wav file. The SC script
+                         must write to this exact path.
         recipe_duration: The target duration in seconds for the audio.
         effect_name: Optional name for the effect.
+        sclang_path: Path to the sclang executable.
 
     Returns:
         Path to the generated .wav file.
 
     Raises:
-        CodeExecutionError: If code execution fails or the output file doesn't exist.
+        CodeExecutionError: If code execution fails, sclang is not found,
+                            or the output file doesn't exist.
     """
-    # Sanitize the input code string to remove null bytes
-    if "\x00" in code:
-        logger.warning(
-            f"Null bytes found in input code for {output_filename}. Sanitizing..."
-        )
-        code = code.replace("\x00", "")
-
-    logger.info(f"Executing code for target output: {output_filename}")
+    logger.info(f"Executing SuperCollider code for target output: '{output_filename}'")
+    code_to_log = code[:500] + "..." if len(code) > 500 else code
+    logger.debug(f"SuperCollider code (first 500 chars):\\n{code_to_log}")
     logger.debug(f"Target duration for context: {recipe_duration}s")
     logger.debug(f"Effect name for context: {effect_name}")
-    logger.debug(f"--- BEGIN Python DSP Code to Execute for {output_filename} ---")
-    for i, line in enumerate(code.splitlines()):
-        logger.debug(f"{i+1:03d} | {line}")
-    logger.debug(f"--- END Python DSP Code for {output_filename} ---")
 
-    persistent_temp_dir = settings.DEFAULT_OUT_DIR / "exec_env_output"
-    persistent_temp_dir = persistent_temp_dir.absolute()
-    persistent_temp_dir.mkdir(parents=True, exist_ok=True)
+    actual_wav_path = Path(output_filename)
+    if not actual_wav_path.is_absolute():
+        err_msg = f"output_filename '{output_filename}' must be an absolute path."
+        logger.error(err_msg)
+        raise CodeExecutionError(err_msg)
 
-    logger.info(f"Target output directory for WAV: {persistent_temp_dir}")
-
-    original_tempdir = tempfile.tempdir
-    tempfile.tempdir = str(persistent_temp_dir)
-    logger.info(f"Temporarily set tempfile.tempdir to: {tempfile.tempdir}")
-
+    # Ensure parent directory for the output .wav file exists
     try:
-        # Extract just the filename without any path components
-        # This ensures we don't accidentally create nested paths
-        safe_filename = Path(output_filename).name
-        if not safe_filename or safe_filename in (".", ".."):
-            error_msg = f"Invalid output_filename provided: '{output_filename}'. Must be a valid filename."
-            logger.error(error_msg)
-            raise CodeExecutionError(error_msg)
+        actual_wav_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Ensured output directory exists: {actual_wav_path.parent}")
+    except OSError as e:
+        err_msg = f"Could not create parent directory {actual_wav_path.parent} for output file: {e}"
+        logger.error(err_msg)
+        raise CodeExecutionError(err_msg) from e
 
-        # Create a Path object for the final intended output
-        actual_wav_path = persistent_temp_dir / safe_filename
-        logger.info(f"Full output path will be: {actual_wav_path}")
-
-        executor = LocalPythonExecutor(
-            additional_authorized_imports=AUTHORIZED_IMPORTS_FOR_DSP
+    temp_scd_file_path_str: str | None = None
+    try:
+        # Create a temporary .scd file to hold the SuperCollider code.
+        # The CompilerAgent is responsible for ensuring 'code' uses output_filename, recipe_duration etc.
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".scd", delete=False, encoding="utf-8"
+        ) as tmp_f:
+            tmp_f.write(code)
+            temp_scd_file_path_str = tmp_f.name
+        logger.info(
+            f"SuperCollider code written to temporary file: {temp_scd_file_path_str}"
         )
 
-        modules_as_variables = {
-            "supriya": supriya,
-            "sf": sf,
-            "soundfile": sf,
-            "np": np,
-            "numpy": np,
-            "scipy": scipy,
-            "math": math,
-            "random": random,
-            "array": array,
-            "json": json,
-            "pathlib": Path,
-            "traceback": traceback,
-            "time": time,
-            "settings": settings,
-        }
+        cmd = [sclang_path, temp_scd_file_path_str]
+        logger.info(f"Executing command: {' '.join(cmd)}")
 
-        # Prepare functions/callables to be sent as tools
-        functions_as_tools = {
-            "hash": hash,
-        }
-
-        # Combine recipe-specific variables with modules for send_variables
-        variables_for_executor = {
-            "output_filename": str(actual_wav_path),  # Pass the full path
-            "duration": recipe_duration,
-            "effect_name": effect_name,
-            **modules_as_variables,
-        }
-        logger.debug(
-            f"Variables prepared for LocalPythonExecutor: {list(variables_for_executor.keys())}"
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
         )
+        stdout, stderr = process.communicate()  # Wait for completion
 
-        try:
-            logger.debug(
-                f"Attempting to execute code in LocalPythonExecutor for {actual_wav_path}..."
+        if process.returncode != 0:
+            error_message = (
+                f"sclang execution failed for {temp_scd_file_path_str} (targeting {output_filename}).\\n"
+                f"Return code: {process.returncode}\\n"
+                f"STDOUT:\\n{stdout}\\n"
+                f"STDERR:\\n{stderr}"
             )
-            # Execute the code. The code is expected to use 'output_filename' variable.
-            # LocalPythonExecutor returns the result of the last expression or None.
-            # We are relying on the code to write the file, not on a return value here.
-            executor.send_variables(variables_for_executor)
-            executor.send_tools(functions_as_tools)
-            code_output, logs, is_final_answer = executor(code)
-            logger.debug(
-                f"LocalPythonExecutor raw output (result of executed code) for {output_filename}: {code_output!r}"
-            )
-            logger.debug(f"LocalPythonExecutor logs for {output_filename}: {logs!r}")
-            if is_final_answer:
+            logger.error(error_message)
+            raise CodeExecutionError(error_message)
+        else:
+            logger.info(f"sclang execution successful for {temp_scd_file_path_str}.")
+            logger.debug(f"sclang STDOUT:\\n{stdout}")
+            if stderr:
+                logger.debug(f"sclang STDERR:\\n{stderr}")
+
+    except FileNotFoundError:
+        err_msg = f"sclang executable not found at '{sclang_path}'. Please ensure SuperCollider is installed and sclang is in your PATH or provide the correct path."
+        logger.error(err_msg)
+        raise CodeExecutionError(err_msg)
+    except Exception as e:
+        error_message = f"An unexpected error occurred during SuperCollider code execution for {output_filename}: {e}"
+        logger.error(error_message, exc_info=True)
+        raise CodeExecutionError(error_message) from e
+    finally:
+        if temp_scd_file_path_str and Path(temp_scd_file_path_str).exists():
+            try:
+                Path(temp_scd_file_path_str).unlink()
                 logger.info(
-                    f"LocalPythonExecutor produced final answer for {output_filename}"
+                    f"Successfully deleted temporary .scd file: {temp_scd_file_path_str}"
+                )
+            except OSError as e_unlink:
+                logger.warning(
+                    f"Could not delete temporary .scd file {temp_scd_file_path_str}: {e_unlink}"
                 )
 
-        except InterpreterError as e:
-            error_message = f"Code execution failed with InterpreterError for {output_filename}: {e}"
-            logger.error(error_message, exc_info=True)  # Log with traceback
-            # Include more details from the error if available and helpful
-            # For example, e.stdout and e.stderr if they exist and are populated
-            if hasattr(e, "stdout") and e.stdout:
-                logger.error(f"InterpreterError STDOUT: {e.stdout}")
-            if hasattr(e, "stderr") and e.stderr:
-                logger.error(f"InterpreterError STDERR: {e.stderr}")
-            raise CodeExecutionError(error_message) from e
-        except Exception as e:
-            error_message = f"An unexpected error occurred during code execution for {output_filename}: {e}"
-            logger.error(error_message, exc_info=True)  # Log with traceback
-            raise CodeExecutionError(error_message) from e
-    finally:
-        tempfile.tempdir = original_tempdir
-        logger.info(
-            f"Restored tempfile.tempdir to: {original_tempdir if original_tempdir else 'system default'}"
-        )
-
-    # Final check for the output file existence (belt-and-suspenders)
     if not actual_wav_path.exists() or not actual_wav_path.is_file():
-        # This should ideally not be reached if the checks above are comprehensive
-        raise FileNotFoundError(
-            f"Generated .wav file not found at final path after all checks: {actual_wav_path}."
+        error_message = (
+            f"SuperCollider script ran but the output .wav file was not found at {actual_wav_path}.\\n"
+            f"Check sclang STDOUT/STDERR above for clues from the script itself."
         )
+        logger.error(error_message)
+        raise CodeExecutionError(error_message)
 
-    logger.info(f"Successfully produced WAV file: {actual_wav_path}")
+    logger.info(f"Successfully produced WAV file via SuperCollider: {actual_wav_path}")
     return actual_wav_path
-
-
-if __name__ == "__main__":
-    import json
-
-    logging.basicConfig(level=logging.DEBUG)
-    logger.info("Testing exec_env.py...")
-
-    # Ensure settings are minimally available for paths
-    if not hasattr(settings, "DEFAULT_OUT_DIR"):
-
-        class DummySettings:
-            DEFAULT_OUT_DIR = Path("./temp_output_exec_env_test")
-            DEFAULT_SR = 48000
-
-        settings = DummySettings()  # type: ignore
-        settings.DEFAULT_OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Test code that directly writes a wav file
-    sample_code = """
-import numpy as np
-import soundfile as sf
-from phonosyne import settings
-
-# Get the output filename from the provided variables
-wav_path = output_filename
-
-frequency = 440.0
-amplitude = 0.5
-
-# Use settings.DEFAULT_SR and duration from variables
-sample_rate = settings.DEFAULT_SR
-t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-wave = amplitude * np.sin(2 * np.pi * frequency * t)
-
-# Write the file directly
-sf.write(wav_path, wave, sample_rate, subtype='FLOAT')
-"""
-
-    test_output_filename = "test_sine.wav"
-    try:
-        logger.info("\n--- Testing code execution ---")
-        dummy_recipe_json = json.dumps(
-            {
-                "effect_name": "test_sine",
-                "duration": 1.0,
-                "description": "Test sine wave generation",
-            }
-        )
-
-        generated_wav = run_code(
-            sample_code,
-            output_filename=test_output_filename,
-            recipe_duration=1.0,
-        )
-
-        logger.info(f"Generated audio file: {generated_wav}")
-        assert generated_wav.exists()
-        assert generated_wav.stat().st_size > 0
-        logger.info(f"File size: {generated_wav.stat().st_size} bytes. Test passed.")
-        # Manual cleanup needed for file in settings.DEFAULT_OUT_DIR / "exec_env_output"
-    except Exception as e:
-        logger.error(f"Error in execution test: {e}", exc_info=True)
-
-    print(
-        f"\nFinished exec_env.py tests. Please check {settings.DEFAULT_OUT_DIR / 'exec_env_output'} for generated files and clean up manually."
-    )

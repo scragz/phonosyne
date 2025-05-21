@@ -37,7 +37,9 @@ from phonosyne.agents.schemas import (  # Add other schemas as they become neces
 
 # Import specific utilities needed for the tools
 from phonosyne.utils.exec_env import CodeExecutionError
-from phonosyne.utils.exec_env import run_code as existing_run_code
+from phonosyne.utils.exec_env import (
+    run_supercollider_code as existing_run_supercollider_code,
+)
 
 logger = logging.getLogger(__name__)  # Added
 
@@ -47,184 +49,60 @@ logger.info(f"Execution environment output directory set to: {EXEC_ENV_OUTPUT_DI
 
 
 @function_tool
-async def execute_python_dsp_code(
+async def run_supercollider_code(
     code: str,
-    output_filename: str,
+    output_filename: str,  # This is absolute path as per updated prompt
     effect_name: str,
     recipe_duration: float,
 ) -> str:
     """
-    Executes Python DSP code, aiming to save the output .wav file directly into
-    the project's output directory (output/exec_env_output/).
-    The DSP code itself is responsible for audio generation and saving the file.
-    This tool facilitates the execution and ensures the file is in the correct location.
+    Executes a SuperCollider script and saves the output .wav file.
+    The SC script itself is responsible for audio generation and saving.
+    This tool facilitates the execution using sclang.
 
     Args:
-        code: The Python DSP code string.
-        output_filename: Suggested filename stem (e.g., "effect_attempt_1"). Path components will be stripped, and .wav will be appended if missing.
-        effect_name: The name of the effect, used for context and potentially in the output filename if not well-formed.
+        code: The SuperCollider code string.
+        output_filename: Absolute path for the output .wav file. The SC script
+                         must write to this exact path.
+        effect_name: The name of the effect, for context.
         recipe_duration: The target duration of the sound in seconds.
 
     Returns:
-        Absolute path to the .wav file in output/exec_env_output/ on success, or an error message string.
+        Absolute path to the .wav file on success, or an error message string.
     """
     logger.info(
-        f"execute_python_dsp_code: initial output_filename='{output_filename}', effect_name='{effect_name}', duration='{recipe_duration}'"
+        f"run_supercollider_code_tool: output_filename='{output_filename}', effect_name='{effect_name}', duration='{recipe_duration}'"
     )
     code_to_log = code[:500] + "..." if len(code) > 500 else code
-    logger.debug(f"Code (first 500 chars):\\n{code_to_log}")
+    logger.debug(f"Code (first 500 chars):\n{code_to_log}")
 
     try:
-        # Validate inputs that are directly passed
-        if not effect_name or not isinstance(effect_name, str):
-            err_msg = f"Error: effect_name is missing or invalid. Got: {effect_name}"
-            logger.error(err_msg)
-            return err_msg
-        if not isinstance(recipe_duration, (float, int)) or recipe_duration <= 0:
-            err_msg = f"Error: recipe_duration is missing, not a positive number, or invalid type. Got: {recipe_duration} (type: {type(recipe_duration)})"
-            logger.error(err_msg)
-            return err_msg
-
-        # 1. Ensure the designated output directory exists
-        try:
-            EXEC_ENV_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-            logger.info(
-                f"Ensured execution output directory exists: {EXEC_ENV_OUTPUT_DIR}"
-            )
-        except Exception as mkdir_err:
-            err_msg = f"CRITICAL ERROR: Cannot create/access output directory {EXEC_ENV_OUTPUT_DIR}: {mkdir_err}"
-            logger.error(err_msg, exc_info=True)
-            return err_msg
-
-        # 2. Sanitize output_filename to get a safe base name.
-        base_name_candidate = Path(output_filename).name
-        if not base_name_candidate or base_name_candidate in (".", ".."):
-            base_name_candidate = "default_dsp_output.wav"
-            logger.warning(
-                f"Original output_filename '{output_filename}' was invalid/empty, using '{base_name_candidate}'"
-            )
-
-        if not base_name_candidate.lower().endswith(".wav"):
-            final_base_filename = f"{base_name_candidate}.wav"
-        else:
-            final_base_filename = base_name_candidate
-        logger.info(f"Sanitized base filename: {final_base_filename}")
-
-        # 3. Construct the desired final absolute path.
-        desired_final_wav_path = (EXEC_ENV_OUTPUT_DIR / final_base_filename).resolve()
-        logger.info(
-            f"Targeting final WAV path for direct write: {desired_final_wav_path}"
-        )
-
-        # 4. Call existing_run_code, passing the full desired path.
-        returned_path_str_from_exec = existing_run_code(
+        # existing_run_supercollider_code is synchronous.
+        # The agents SDK's @function_tool and runner should handle
+        # running this in a way that doesn't block the event loop (e.g. thread pool).
+        wav_path_obj = existing_run_supercollider_code(
             code=code,
-            output_filename=str(
-                desired_final_wav_path
-            ),  # Attempt direct write to target
-            recipe_duration=float(recipe_duration),  # Use directly
-            effect_name=effect_name,  # Use directly
+            output_filename=output_filename,  # This is the absolute path
+            recipe_duration=recipe_duration,
+            effect_name=effect_name,
+            # sclang_path will use its default from existing_run_supercollider_code
         )
-
-        actually_written_path = Path(returned_path_str_from_exec).resolve()
-        logger.info(f"existing_run_code reported writing to: {actually_written_path}")
-
-        final_wav_path_to_return: Path | None = None
-
-        # 5. Check where the file actually ended up.
-        if not actually_written_path.exists():
-            err_msg = (
-                f"Error: existing_run_code path {actually_written_path} does not exist."
-            )
-            logger.error(err_msg)
-            # Check if it wrote to desired_final_wav_path anyway and just returned a bad path
-            if desired_final_wav_path.exists() and desired_final_wav_path.is_file():
-                logger.warning(
-                    f"File found at {desired_final_wav_path} despite existing_run_code returning non-existent path. Using this."
-                )
-                final_wav_path_to_return = desired_final_wav_path
-            else:
-                return err_msg  # File is truly missing
-        elif actually_written_path == desired_final_wav_path:
-            logger.info(
-                f"Success: existing_run_code wrote directly to desired location: {desired_final_wav_path}"
-            )
-            final_wav_path_to_return = desired_final_wav_path
-        else:
-            # existing_run_code wrote somewhere else (e.g., /tmp). Attempt to move.
-            logger.warning(
-                f"existing_run_code wrote to {actually_written_path} instead of {desired_final_wav_path}. Attempting to move."
-            )
-            try:
-                # Ensure target parent dir exists (should already, but good practice)
-                desired_final_wav_path.parent.mkdir(parents=True, exist_ok=True)
-                if (
-                    desired_final_wav_path.exists()
-                ):  # If target (e.g. from a previous failed run) exists
-                    logger.warning(
-                        f"Target file {desired_final_wav_path} already exists. Overwriting."
-                    )
-                    desired_final_wav_path.unlink()
-
-                shutil.copy2(str(actually_written_path), str(desired_final_wav_path))
-                logger.info(
-                    f"File successfully copied from {actually_written_path} to {desired_final_wav_path}"
-                )
-
-                if actually_written_path.exists() and actually_written_path.is_file():
-                    actually_written_path.unlink()
-                    logger.info(
-                        f"Successfully unlinked source file: {actually_written_path}"
-                    )
-
-                final_wav_path_to_return = desired_final_wav_path
-            except Exception as move_err:
-                err_msg = f"Error moving file from {actually_written_path} to {desired_final_wav_path}: {move_err}"
-                logger.error(err_msg, exc_info=True)
-                # File is at actually_written_path but couldn't be moved. Return error to avoid using /tmp path.
-                return err_msg
-
-        # 6. Final verification
-        if (
-            not final_wav_path_to_return
-            or not final_wav_path_to_return.exists()
-            or not final_wav_path_to_return.is_file()
-        ):
-            err_msg = f"Error: Final WAV path {final_wav_path_to_return} is invalid or file not found after processing."
-            logger.error(err_msg)
-            # Check if the original temp file still exists if move failed partway
-            if (
-                actually_written_path.exists()
-                and actually_written_path != final_wav_path_to_return
-            ):
-                logger.error(
-                    f"Original file at {actually_written_path} might still exist if move failed."
-                )
-            return err_msg
-
         logger.info(
-            f"execute_python_dsp_code successfully produced: {final_wav_path_to_return}"
+            f"run_supercollider_code_tool successfully produced: {wav_path_obj}"
         )
-        return str(final_wav_path_to_return)
-
-    except (
-        json.JSONDecodeError
-    ) as e:  # This specific catch block might become less relevant if recipe_json is no longer parsed here.
-        err_msg = f"JSONDecodeError encountered (should not happen if recipe_json is no longer an arg): {str(e)}"
+        return str(wav_path_obj)
+    except CodeExecutionError as e:  # Make sure CodeExecutionError is imported
+        err_msg = f"CodeExecutionError from existing_run_supercollider_code: {str(e)}"
         logger.error(err_msg, exc_info=True)
         return err_msg
     except (
-        CodeExecutionError
-    ) as e:  # Assuming this is a custom error from existing_run_code
-        err_msg = f"CodeExecutionError from existing_run_code: {str(e)}"
-        logger.error(err_msg, exc_info=True)
-        return err_msg
-    except FileNotFoundError as e:
-        err_msg = f"FileNotFoundError encountered: {str(e)}"
+        FileNotFoundError
+    ) as e:  # Specific error from existing_run_supercollider_code
+        err_msg = f"FileNotFoundError (e.g., sclang not found) from existing_run_supercollider_code: {str(e)}"
         logger.error(err_msg, exc_info=True)
         return err_msg
     except Exception as e:
-        err_msg = f"Unexpected error in execute_python_dsp_code: {str(e)}"
+        err_msg = f"Unexpected error in run_supercollider_code_tool: {str(e)}"
         logger.error(err_msg, exc_info=True)
         return err_msg
 

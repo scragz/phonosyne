@@ -43,7 +43,8 @@ from agents import (
 
 from phonosyne import settings
 from phonosyne.agents.schemas import AnalyzerOutput  # Conceptual input schema
-from phonosyne.tools import execute_python_dsp_code, validate_audio_file
+from phonosyne.tools import validate_audio_file  # Removed execute_python_dsp_code
+from phonosyne.utils.exec_env import run_supercollider_code  # Added new tool
 
 logger = logging.getLogger(__name__)
 
@@ -83,20 +84,22 @@ class CompilerAgent(Agent):
             **kwargs: Additional keyword arguments to pass to the `agents.Agent` constructor.
                       The 'model' kwarg can be a model name (str) or a Model instance.
         """
-        agent_name = kwargs.pop("name", "PhonosyneCompiler_Agent")
+        agent_name = kwargs.pop("name", "PhonosyneCompiler_Agent")  # Updated agent name
         # The 'model' kwarg will be passed in by OrchestratorAgent.
         model_arg = kwargs.pop("model", settings.MODEL_COMPILER)
         logger.info(f"CompilerAgent initializing with model_arg: {model_arg!r}")
 
         # The tools available to this agent
         agent_tools = [
-            execute_python_dsp_code,
+            run_supercollider_code,  # Changed from execute_python_dsp_code
             validate_audio_file,
         ]
 
         logger.info("Output directory for CompilerAgent: %s", settings.DEFAULT_OUT_DIR)
-
-        instructions = f"{COMPILER_INSTRUCTIONS}\n\n## Output Directory\n\nOutput files to be saved in: {settings.DEFAULT_OUT_DIR}\n"
+        # Instructions should now guide the generation of SuperCollider code
+        # and usage of run_supercollider_code tool.
+        # The prompt file prompts/compiler.md is assumed to be updated accordingly.
+        instructions = f"{COMPILER_INSTRUCTIONS}\\n\\n## Output Directory\\n\\nOutput files to be saved in: {settings.DEFAULT_OUT_DIR}\\n"
 
         super().__init__(
             name=agent_name,
