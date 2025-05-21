@@ -22,10 +22,10 @@ Any other exit path is a failure. Never announce success, return “OK,” or yi
 > **Filename rule**
 > When calling **`FileMoverTool`**, build `target_path` as:
 > `f"{run.output_dir}/{recipe.effect_name}.wav"`
-> (`recipe.effect_name` must be slugified but human-readable starting with L1.1, L1.2, A1, etc., e.g. `L3.2_whispering_willows.wav`).
+> (`recipe.effect_name` must be 50 characters max, slugified but human-readable, starting with L1.1, L1.2, A1, etc., e.g. `L3.2_whispering_willows.wav`).
 
 > **Output directory rule**
-> The `run.output_dir` is created as `./output/<slugified brief[:10 first 30 characters]>/` to ensure uniqueness and avoid collisions without hitting the filesystem limits.
+> The `run.output_dir` is created as `./output/<slugified brief[:50 first 50 characters]>/` to ensure uniqueness and avoid collisions without hitting the filesystem limits.
 
 ---
 
@@ -34,7 +34,7 @@ Any other exit path is a failure. Never announce success, return “OK,” or yi
 ```json
 run = {
   "id": "<slug>",
-  "output_dir": "./output/<slug[:30]>/",
+  "output_dir": "./output/<slug[:50]>/",
   "plan": null,
   "samples": [],          # 18 entries created during processing
   "errors": [],
@@ -117,7 +117,10 @@ _`REPORT` is reached only from `FINALIZE`. Early termination routes to `ERROR` a
     - **2. COMPILATION STAGE:**
 
       - (This stage is reached only if Analysis was successful in the current attempt)
-      - Call `CompilerAgentTool` with `recipe_json_string` (the valid JSON string from the successful analysis).
+      - Prepare `compiler_tool_input_str` as a JSON string. This JSON string **MUST** represent a JSON object with exactly two top-level keys:
+        - `"recipe_json"`: The value for this key **MUST** be `recipe_json_string` (the complete, verbatim, stringified JSON output from the successful `AnalyzerAgentTool` call).
+        - `"output_dir_context"`: The value for this key **MUST** be the string `run.output_dir` (your current run's output directory path).
+      - Call `CompilerAgentTool` with `compiler_tool_input_str` as its single argument.
       - Let `compiler_tool_output` be the string result from `CompilerAgentTool`.
       - **Validate `compiler_tool_output`:**
         - If `compiler_tool_output` is empty, or starts with an error prefix (e.g., "Error:", "CodeExecutionError:", "ValidationFailedError:", "FileNotFoundError:"), or is not a string that looks like an absolute path to a `.wav` file within the `output/exec_env_output/` directory (e.g., it's a `/tmp/` path, doesn't end in `.wav`, or doesn't contain the expected directory segment):
