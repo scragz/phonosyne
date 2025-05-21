@@ -30,6 +30,7 @@ dependencies = [
   "openai-agents",
   "librosa",
   "numba",
+  "supriya",
 ]
 
 [project.optional-dependencies]

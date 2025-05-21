@@ -85,6 +85,10 @@ def run(  # Changed to synchronous def
     root_logger = logging.getLogger()  # Get the root logger
     root_logger.setLevel(log_level)  # Set level for your app
 
+    # Also set the level for the main app logger "phonosyne"
+    phonosyne_logger = logging.getLogger("phonosyne")
+    phonosyne_logger.setLevel(log_level)
+
     # Remove any existing handlers to avoid duplicate messages or conflicts
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
@@ -103,16 +107,22 @@ def run(  # Changed to synchronous def
     # These should be set AFTER your root logger and its handlers are configured.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.INFO)
     # Specifically target the logger used by openai's base client for HTTP details
-    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+    logging.getLogger("openai._base_client").setLevel(logging.INFO)
 
     if verbose:
         console.print(f"Verbose mode enabled. Log level set to DEBUG.", style="dim")
         root_logger.debug("Root logger reconfigured for DEBUG level by CLI.")
+        phonosyne_logger.debug(
+            "Phonosyne specific loggers also reconfigured for DEBUG level by CLI."
+        )
     else:
         # Optionally, confirm INFO level if not verbose, or remove this else block
         root_logger.info("Root logger reconfigured for INFO level by CLI.")
+        phonosyne_logger.info(
+            "Phonosyne specific loggers reconfigured for INFO level by CLI."
+        )
 
     console.print(
         Panel(Text(f"Phonosyne v{__version__}", justify="center", style="bold green"))

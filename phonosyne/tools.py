@@ -48,44 +48,40 @@ logger.info(f"Execution environment output directory set to: {EXEC_ENV_OUTPUT_DI
 
 @function_tool
 async def execute_python_dsp_code(
-    code: str, output_filename: str, recipe_json: str
+    code: str,
+    output_filename: str,
+    effect_name: str,
+    recipe_duration: float,
 ) -> str:
     """
     Executes Python DSP code, aiming to save the output .wav file directly into
     the project's output directory (output/exec_env_output/).
-    If direct save isn't possible, it attempts to move the file from a temporary location.
-    The DSP code must return a tuple: (numpy_array, sample_rate).
-    'description' and 'duration' from recipe_json are available in the code's scope.
+    The DSP code itself is responsible for audio generation and saving the file.
+    This tool facilitates the execution and ensures the file is in the correct location.
 
     Args:
         code: The Python DSP code string.
-        output_filename: Suggested filename (e.g., "effect_attempt_1.wav"). Path components will be stripped.
-        recipe_json: JSON string of the synthesis recipe (AnalyzerOutput schema).
+        output_filename: Suggested filename stem (e.g., "effect_attempt_1"). Path components will be stripped, and .wav will be appended if missing.
+        effect_name: The name of the effect, used for context and potentially in the output filename if not well-formed.
+        recipe_duration: The target duration of the sound in seconds.
 
     Returns:
-        Absolute path to the .wav file in output/exec_env_output/ on success, or an error message.
+        Absolute path to the .wav file in output/exec_env_output/ on success, or an error message string.
     """
-    logger.info(f"execute_python_dsp_code: initial output_filename='{output_filename}'")
+    logger.info(
+        f"execute_python_dsp_code: initial output_filename='{output_filename}', effect_name='{effect_name}', duration='{recipe_duration}'"
+    )
     code_to_log = code[:500] + "..." if len(code) > 500 else code
     logger.debug(f"Code (first 500 chars):\\n{code_to_log}")
 
     try:
-        recipe_data = json.loads(recipe_json)
-        if not isinstance(recipe_data, dict):
-            err_msg = f"Error: recipe_json did not decode to a dictionary. Type: {type(recipe_data)}"
+        # Validate inputs that are directly passed
+        if not effect_name or not isinstance(effect_name, str):
+            err_msg = f"Error: effect_name is missing or invalid. Got: {effect_name}"
             logger.error(err_msg)
             return err_msg
-
-        effect_name = recipe_data.get("effect_name")
-        description = recipe_data.get("description")
-        duration = recipe_data.get("duration")
-        if description is None or duration is None:
-            missing = [
-                k
-                for k, v in {"description": description, "duration": duration}.items()
-                if v is None
-            ]
-            err_msg = f"Error: {', '.join(missing)} missing from recipe_json."
+        if not isinstance(recipe_duration, (float, int)) or recipe_duration <= 0:
+            err_msg = f"Error: recipe_duration is missing, not a positive number, or invalid type. Got: {recipe_duration} (type: {type(recipe_duration)})"
             logger.error(err_msg)
             return err_msg
 
@@ -126,10 +122,8 @@ async def execute_python_dsp_code(
             output_filename=str(
                 desired_final_wav_path
             ),  # Attempt direct write to target
-            recipe_description=str(description),
-            recipe_duration=float(duration),
-            recipe_json_str=recipe_json,
-            effect_name=effect_name,
+            recipe_duration=float(recipe_duration),  # Use directly
+            effect_name=effect_name,  # Use directly
         )
 
         actually_written_path = Path(returned_path_str_from_exec).resolve()
@@ -213,8 +207,10 @@ async def execute_python_dsp_code(
         )
         return str(final_wav_path_to_return)
 
-    except json.JSONDecodeError as e:
-        err_msg = f"JSONDecodeError for recipe_json: {str(e)}"
+    except (
+        json.JSONDecodeError
+    ) as e:  # This specific catch block might become less relevant if recipe_json is no longer parsed here.
+        err_msg = f"JSONDecodeError encountered (should not happen if recipe_json is no longer an arg): {str(e)}"
         logger.error(err_msg, exc_info=True)
         return err_msg
     except (
@@ -241,13 +237,13 @@ from phonosyne.dsp.validators import validate_wav as existing_validate_wav
 
 
 @function_tool
-async def validate_audio_file(file_path: str, spec_json: str) -> str:
+async def validate_audio_file(file_path: str, recipe_json: str) -> str:
     """
     Validates a generated .wav file against technical specifications.
 
     Args:
         file_path: Path to the temporary .wav file to validate.
-        spec_json: A JSON string of the AnalyzerOutput schema containing target specifications
+        recipe_json: A JSON string of the AnalyzerOutput schema containing target specifications
                    (like duration, effect_name). Sample rate is currently assumed from settings.
 
     Returns:
@@ -261,7 +257,7 @@ async def validate_audio_file(file_path: str, spec_json: str) -> str:
         if not abs_file_path.exists():
             return f"Validation error: Audio file does not exist at {abs_file_path} (from {file_path})"
 
-        spec_dict = json.loads(spec_json)
+        spec_dict = json.loads(recipe_json)
         # AnalyzerOutput is already imported at the top of the file
         analyzer_spec = AnalyzerOutput(**spec_dict)
 
@@ -272,7 +268,7 @@ async def validate_audio_file(file_path: str, spec_json: str) -> str:
     except ValidationFailedError as e:
         return f"ValidationFailedError: {str(e)}"
     except json.JSONDecodeError as e:
-        return f"JSONDecodeError for spec_json: {str(e)}"
+        return f"JSONDecodeError for recipe_json: {str(e)}"
     except Exception as e:
         return f"Unexpected error during audio validation: {str(e)}"
 
