@@ -92,7 +92,7 @@ Let `base_temp_output_dir = "/Users/scragz/Projects/phonosyne/output/exec_env_ou
      - The SuperCollider `SynthDef` should be designed to keep signal levels approximately within `[-1, 1]`. It is **mandatory** to apply `.tanh` to the final signal before output to help ensure it maps to this range.
      - The script must use the SC variable `gAbsoluteOutputWavPath` (that you defined within the script) as the file path for recording.
      - Save the final (mono, 48kHz, 32-bit float) SuperCollider audio signal to a `.wav` file at `gAbsoluteOutputWavPath` using server-side recording (e.g., `s.prepareForRecord`, `s.record`, wait `gRecipeDuration`, then `s.stopRecording`).
-     - The Synth(s) created should be self-freeing, typically by using `DoneAction.freeSelf` in an `EnvGen`.
+     - The Synth(s) created should be self-freeing, typically by using `Done.freeSelf` in an `EnvGen`.
      - The script should be self-contained and terminate cleanly after recording.
    - **Error Correction Principle**: If `n > 1`, use `last_error_context` (which contains the error message from the previous failed attempt and potentially the failing code) to intelligently modify the SuperCollider script generation logic. The goal is to address the specific error that occurred.
    - Store the generated script as `last_generated_code_string`.
@@ -188,7 +188,7 @@ Within your SC script's variable definition area (Section A), after defining `p_
 **Server Reference**:
 
 ```supercollider
-        var server = s; // Or Server.default; (Still inside the { ... } block)
+var server = s; // Or Server.default; (Still inside the { ... } block)
 ```
 
 **Important Tips**:
@@ -206,34 +206,34 @@ Within your SC script's variable definition area (Section A), after defining `p_
 **Structure (inside the `{ ... }` block, after variable declarations)**:
 
 ```supercollider
-        SynthDef(gEffectName ++ "_SynthDef", { |outBus = 0, gate = 1, masterAmp = 0.1, freq = 440, attackTime = 0.01, sustainTime = 1.0, releaseTime = 0.5|
-            var signal, envelope;
+SynthDef(gEffectName ++ "_SynthDef", { |outBus = 0, gate = 1, masterAmp = 0.1, freq = 440, attackTime = 0.01, sustainTime = 1.0, releaseTime = 0.5|
+    var signal, envelope;
 
-            // Envelope: Using Env.new for precise ADSR segment control.
-            // Levels: Start at 0, peak to 1 (scaled by masterAmp), sustain at 1, release to 0.
-            // Times: Durations for attack, sustain, and release segments.
-            envelope = EnvGen.kr(
-                Env.new([0, 1, 1, 0], [attackTime, sustainTime, releaseTime], curve: -4.0),
-                gate, // Gate controls the progression through the envelope
-                levelScale: masterAmp,
-                doneAction: DoneAction.freeSelf // Crucial: frees the synth when envelope is done
-            );
+    // Envelope: Using Env.new for precise ADSR segment control.
+    // Levels: Start at 0, peak to 1 (scaled by masterAmp), sustain at 1, release to 0.
+    // Times: Durations for attack, sustain, and release segments.
+    envelope = EnvGen.kr(
+        Env.new([0, 1, 1, 0], [attackTime, sustainTime, releaseTime], curve: -4.0),
+        gate, // Gate controls the progression through the envelope
+        levelScale: masterAmp,
+        doneAction: Done.freeSelf // Crucial: frees the synth when envelope is done
+    );
 
-            // Signal Chain (example: simple sine wave)
-            signal = SinOsc.ar(freq);
-            signal = signal * envelope;
+    // Signal Chain (example: simple sine wave)
+    signal = SinOsc.ar(freq);
+    signal = signal * envelope;
 
-            // MANDATORY: Apply .tanh() to the final signal before output
-            signal = signal.tanh;
+    // MANDATORY: Apply .tanh() to the final signal before output
+    signal = signal.tanh;
 
-            // Output: Mono to the specified output bus (usually 0 for recording main out)
-            Out.ar(outBus, signal);
-        }).add; // Add the SynthDef to the server
+    // Output: Mono to the specified output bus (usually 0 for recording main out)
+    Out.ar(outBus, signal);
+}).add; // Add the SynthDef to the server
 
-        // Note: SynthDef.add is generally blocking on a local server.
-        // No server.sync is needed here if this code is not inside a Routine.
-        // If issues arise with SynthDef not being ready (e.g., on a remote/latent server),
-        // more complex asynchronous SynthDef loading might be required.
+// Note: SynthDef.add is generally blocking on a local server.
+// No server.sync is needed here if this code is not inside a Routine.
+// If issues arise with SynthDef not being ready (e.g., on a remote/latent server),
+// more complex asynchronous SynthDef loading might be required.
 ```
 
 **Important Tips**:
@@ -242,7 +242,7 @@ Within your SC script's variable definition area (Section A), after defining `p_
 - **Parameters**: Define `SynthDef` arguments for `attackTime`, `sustainTime`, and `releaseTime` to be controlled by the calculated `p_attackTime`, `p_sustainTime`, `p_releaseTime`.
 - **Envelope is Key (`Env.new`)**:
   - Use `Env.new([0, 1, 1, 0], [attackSegmentDuration, sustainSegmentDuration, releaseSegmentDuration], curve: -4.0)` for a standard ADSR shape where sustain is held at peak level.
-  - `doneAction: DoneAction.freeSelf` on `EnvGen.kr` is essential for freeing the synth.
+  - `doneAction: Done.freeSelf` on `EnvGen.kr` is essential for freeing the synth.
 - **`.tanh`**: Always apply `.tanh` to the signal just before `Out.ar`.
 - **Output**: Use `Out.ar(0, signal)` for mono output.
 
@@ -254,43 +254,63 @@ Within your SC script's variable definition area (Section A), after defining `p_
 
 **Structure (inside the `{ ... }` block, after SynthDef creation)**:
 
-```supercollider
-        Routine {
-            // 1. Prepare for Recording
-            server.prepareForRecord(
-                path: gAbsoluteOutputWavPath, // Use the tool-injected path
-                numChannels: 1,               // Mono
-                sampleRate: 48000,            // 48kHz
-                headerFormat: "WAV",          // WAV format
-                sampleFormat: "float"         // 32-bit float
-            );
-            server.sync; // Wait for preparation to complete (safe inside Routine)
+````supercollider
+// This Routine is for recording and synth playback.
+// It assumes the server is booted and SynthDef is added,
+// which should be handled by an outer Routine or setup block.
+Routine {
+    // Define a target sample rate, e.g., for calculating recBufSize if needed,
+    // though actual recording sample rate is usually set by server options.
+    var targetSampleRate = 48000;
 
-            // 2. Start Recording
-            server.record;
-            server.sync; // Ensure recording has started (safe inside Routine)
+    // 1. Set server's recorder properties BEFORE calling prepareForRecord.
+    // This ensures the server's recorder instance uses these specific settings.
+    server.recChannels = 1;               // Mono recording
+    server.recHeaderFormat = "WAV";       // WAV file format
+    server.recSampleFormat = "float";     // 32-bit float sample format
+    // recBufSize must be a power of two.
+    // Using targetSampleRate.nextPowerOfTwo (e.g., 65536 for 48kHz) is a common practice.
+    server.recBufSize = targetSampleRate.nextPowerOfTwo;
 
-            // 3. Play the Synth
-            Synth(gEffectName ++ "_SynthDef", [
-                \masterAmp: p_amplitude,     // Use agent-embedded variable
-                \freq: p_frequency,         // Use agent-embedded variable
-                \attackTime: p_attackTime,
-                \sustainTime: p_sustainTime, // Use agent-calculated sustain duration
-                \releaseTime: p_releaseTime
-                // gate defaults to 1; EnvGen handles the envelope lifecycle and freeing
-            ]);
+    // 2. Prepare for Recording
+    // Use the gAbsoluteOutputWavPath (defined by the agent in the main script block)
+    // and the number of channels.
+    server.prepareForRecord(gAbsoluteOutputWavPath, 1); // path, numChannels
+    server.sync; // Wait for preparation to complete (safe inside this Routine)
 
-            // 4. Wait for the total duration of the sound
-            // This should align with attackTime + sustainTime + releaseTime
-            gRecipeDuration.wait;
+    // 3. Start Recording
+    server.record;
+    server.sync; // Ensure recording has started (safe inside this Routine)
 
-            // 5. Stop Recording
-            server.stopRecording;
-            server.sync; // Ensure recording is finalized (safe inside Routine)
+    // 4. Play the Synth
+    // Assumes gEffectName, p_amplitude, p_frequency, p_attackTime,
+    // p_sustainTime, and p_releaseTime are defined in the outer scope
+    // (e.g., the main script block by the agent).
+    Synth(gEffectName ++ "_SynthDef", [
+        \masterAmp: p_amp,          // Use agent-embedded variable for amplitude
+        \freq: p_freq,              // Use agent-embedded variable for frequency
+        \attackTime: p_attack,      // Use agent-embedded variable
+        \sustainTime: p_sustain,    // Use agent-calculated sustain duration
+        \releaseTime: p_release     // Use agent-embedded variable
+        // gate defaults to 1; EnvGen with doneAction: Done.freeSelf handles envelope lifecycle and freeing.
+    ]);
 
-            ("SuperCollider: Recording complete for " ++ gAbsoluteOutputWavPath).postln;
-        }.play(AppClock); // Play the routine, AppClock is typical for timed operations
-```
+    // 5. Wait for the total duration of the sound
+    // gRecipeDuration (defined by the agent) should align with the
+    // total envelope duration (p_attackTime + p_sustainTime + p_releaseTime).
+    gRecipeDuration.wait;
+
+    // 6. Stop Recording
+    server.stopRecording;
+    server.sync; // Ensure recording is finalized and file is written (safe inside this Routine)
+
+    ("SuperCollider: Recording complete for " ++ gAbsoluteOutputWavPath).postln;
+
+    // Quit sclang after a short delay to allow messages to flush
+    (0.1).wait;
+    "SC: Script finished. Quitting sclang.".postln;
+    0.exit;
+}.play(AppClock); // Play the routine; AppClock is typical for timed operations.```
 
 **Important Tips**:
 
@@ -302,54 +322,78 @@ Within your SC script's variable definition area (Section A), after defining `p_
 
 ---
 
-### E. Full Script Example (Conceptual)
+### E. Coding Rules and Best Practices
+
+Failure to follow these rules will lead to errors in the generated SuperCollider script.
+
+- **Declare all function variables** at the start of your script (inside the `{ ... }` block) and at the beginning of each def to avoid scope issues.
+- **Multiple by -1 for negative variables**: If you need to invert a variable (e.g., for phase), use `-1 * variableName` instead of `-variableName`.
+
+---
+
+### F. Full Script Example (Conceptual)
 
 This illustrates how the agent-generated script would look, incorporating the above guidelines. Remember the tool prepends global-like variables.
 
 ```supercollider
-// TOOL-INJECTED VARS (EXAMPLE - NOT PART OF AGENT'S CODE STRING)
-// var gAbsoluteOutputWavPath = "/tmp/_sctemp/MySound_attempt_1.wav";
-// var gRecipeDuration = 3.0; // Total duration for recording & envelope
-// var gEffectName = "MySound";
-// --- END TOOL-INJECTED VARS ---
+var gAbsoluteOutputWavPath = "/tmp/_sctemp/MySound_attempt_1.wav";
+var gRecipeDuration = 3.0; // Total duration for recording & envelope
+var gEffectName = "MySound";
 
-// AGENT GENERATES THIS SCRIPT:
 (
-    { // Start of local scope function block
+    Routine { // Wrap entire logic in a top-level Routine
         // Agent-embedded parameters from recipe_json
         var p_freq = 440.0;
         var p_amp = 0.2;
         var p_attack = 0.05;    // Attack segment duration
         var p_release = 0.8;   // Release segment duration
 
-        // Calculate sustain segment duration to make total envelope duration = gRecipeDuration
-        var p_sustain = max(0.001, gRecipeDuration - p_attack - p_release); // ensure positive
+        var p_sustain;
+        var server;
 
-        var server = s; // Use default server
+        // Calculate sustain segment duration to make total envelope duration = gRecipeDuration
+        p_sustain = max(0.001, gRecipeDuration - p_attack - p_release); // ensure positive
+
+        server = Server.default; // Use \'Server.default\' for clarity, often aliased to \'s\'
+
+        // Ensure server is running before proceeding
+        if (server.serverRunning.not) {
+            "SC: Server not running, attempting to boot...".postln;
+            server.bootSync; // Boot and wait for completion - now inside a Routine
+            "SC: Server booted.".postln;
+        } {
+            "SC: Server already running.".postln;
+        };
 
         SynthDef(gEffectName ++ "_SynthDef", { |outBus = 0, gate = 1, masterAmp = 0.1, freq = 440, attackTime = 0.01, sustainTime = 1.0, releaseTime = 0.5|
             var signal, envelope;
-            // Env.new levels: initial, peak, sustain_plateau, end_of_release
-            // Env.new times: attack_duration, sustain_duration, release_duration
             envelope = EnvGen.kr(
                 Env.new([0, 1, 1, 0], [attackTime, sustainTime, releaseTime], curve: -4.0),
                 gate,
                 levelScale: masterAmp,
-                doneAction: DoneAction.freeSelf
+                doneAction: Done.freeSelf
             );
             signal = SinOsc.ar(freq);
             signal = signal * envelope;
             signal = signal.tanh; // MANDATORY tanh
             Out.ar(outBus, signal);
-        }).add;
+        }).add; // This now happens after server boot check
 
         // SynthDef.add is blocking on local server, no server.sync needed here outside a Routine.
 
+        // This inner Routine for recording remains, and will be scheduled correctly
+        // as part of the outer Routine\'s execution flow.
         Routine {
-            server.prepareForRecord(
-                path: gAbsoluteOutputWavPath,
-                numChannels: 1, sampleRate: 48000, headerFormat: "WAV", sampleFormat: "float"
-            );
+            var targetSampleRate = 48000; // Define intended sample rate
+
+            // Set server\'s recorder properties before calling prepareForRecord
+            server.recChannels = 1;
+            server.recHeaderFormat = "WAV";
+            server.recSampleFormat = "float";
+            server.recBufSize = targetSampleRate.nextPowerOfTwo; // e.g., 65536 for 48kHz
+
+            // Corrected prepareForRecord call
+            server.prepareForRecord(gAbsoluteOutputWavPath, 1); // path, numChannels
             server.sync;
             server.record;
             server.sync;
@@ -362,18 +406,22 @@ This illustrates how the agent-generated script would look, incorporating the ab
                 \releaseTime: p_release
             ]);
 
-            // Wait for the total recipe duration, which matches the envelope's total duration
+            // Wait for the total recipe duration, which matches the envelope\'s total duration
             gRecipeDuration.wait;
 
             server.stopRecording;
             server.sync;
             ("SC: Done: " ++ gAbsoluteOutputWavPath).postln;
-        }.play(AppClock);
 
-    }.value // Execute the defined function block
+            // Quit sclang after a short delay to allow messages to flush
+            (0.1).wait;
+            "SC: Script finished. Quitting sclang.".postln;
+            0.exit;
+        }.play(AppClock); // This inner routine is played on AppClock as before
+
+    }.play(AppClock); // Play the new top-level Routine
 )
-// END OF AGENT-GENERATED SCRIPT
-```
+````
 
 ---
 
@@ -383,9 +431,11 @@ This section provides a reference for SuperCollider Unit Generators (UGens) that
 
 **Important Note on `input` (or first) argument:** Many UGens take an `input` signal (often the first argument, sometimes named `in`). This will be the output of an upstream UGen. For mono operation as generally required, this will be a single UGen instance.
 
+---
+
 ### Envelopes (`Env` class methods and `EnvGen`)
 
-_(The `Env` class creates envelope shape data objects used by `EnvGen.kr`.)_
+_(The `Env` class creates envelope shape data objects used by `EnvGen`.)_
 
 - `Env.adsr(attackTime: 0.01, decayTime: 0.3, sustainLevel: 0.5, releaseTime: 1.0, peakLevel: 1.0, curve: -4.0, bias: 0.0)`: Standard ADSR envelope.
 - `Env.asr(attackTime: 0.01, sustainLevel: 1.0, releaseTime: 1.0, curve: -4.0)`: Attack-Sustain-Release envelope.
@@ -395,15 +445,22 @@ _(The `Env` class creates envelope shape data objects used by `EnvGen.kr`.)_
 - `Env.sine(duration: 1.0, level: 1.0)`: Sine-shaped envelope.
 - `Env.new(levels: [0, 1, 0], times: [0.1, 1.0], curve: -4.0, releaseNode, loopNode, offset)`: Envelope from explicit segments.
 
+---
+
 ### Oscillators
 
 - `SinOsc.ar(freq: 440.0, phase: 0.0, mul: 1.0, add: 0.0)`: Sinusoid oscillator.
-- `LFTri.ar(freq: 440.0, iphase: 0.0, mul: 1.0, add: 0.0)`: Non-band-limited triangle oscillator.
-- `LFSaw.ar(freq: 440.0, iphase: 0.0, mul: 1.0, add: 0.0)`: Non-band-limited sawtooth oscillator.
-- `LFPulse.ar(freq: 440.0, iphase: 0.0, width: 0.5, mul: 1.0, add: 0.0)`: Non-band-limited pulse oscillator.
-- `Osc.ar(bufnum, freq: 440.0, phase: 0.0, mul: 1.0, add: 0.0)`: Interpolating wavetable oscillator. (Requires a buffer)
+- `FSinOsc.kr(freq: 440.0, iphase: 0.0, mul: 1.0, add: 0.0)`: Fast sine oscillator (optimized for control rate, but can be `.ar`).
+- `LFTri.ar(freq: 440.0, iphase: 0.0, mul: 1.0, add: 0.0)`: Non-band-limited triangle oscillator. (Often `.kr` for LFO).
+- `LFSaw.ar(freq: 440.0, iphase: 0.0, mul: 1.0, add: 0.0)`: Non-band-limited sawtooth oscillator. (Often `.kr` for LFO). Also covers `Saw.ar` from the book for basic sawtooth.
+- `LFPulse.ar(freq: 440.0, iphase: 0.0, width: 0.5, mul: 1.0, add: 0.0)`: Non-band-limited pulse oscillator. (Often `.kr` for LFO).
+- `LFPar.kr(freq: 440.0, iphase: 0.0, mul: 1.0, add: 0.0)`: Low-frequency parabolic oscillator. (Typically `.kr` for LFO).
+- `VarSaw.ar(freq: 440.0, iphase: 0.0, width: 0.5, mul: 1.0, add: 0.0)`: Variable-duty (non-band-limited) sawtooth oscillator.
+- `Blip.ar(freq: 440.0, numharm: 200, mul: 1.0, add: 0.0)`: Band-limited impulse train, rich in harmonics.
 - `Impulse.ar(freq: 440.0, phase: 0.0, mul: 1.0, add: 0.0)`: Single-sample impulse generator.
 - `LFGauss.ar(duration: 1.0, width: 0.1, iphase: 0.0, loop: 1, doneAction: 0, mul: 1.0, add: 0.0)`: Gaussian function oscillator.
+
+---
 
 ### Noise Generators
 
@@ -412,15 +469,41 @@ _(The `Env` class creates envelope shape data objects used by `EnvGen.kr`.)_
 - `BrownNoise.ar(mul: 1.0, add: 0.0)`: Brown noise.
 - `GrayNoise.ar(mul: 1.0, add: 0.0)`: Gray noise.
 - `Crackle.ar(chaosParam: 1.5, mul: 1.0, add: 0.0)`: Chaotic noise.
-- `Dust.ar(density: 0.0, mul: 1.0, add: 0.0)`: Unipolar random impulses.
-- `Dust2.ar(density: 0.0, mul: 1.0, add: 0.0)`: Bipolar random impulses.
+- `Dust.ar(density: 20.0, mul: 1.0, add: 0.0)`: Unipolar random impulses. `density` is average impulses per second.
+- `Dust2.ar(density: 20.0, mul: 1.0, add: 0.0)`: Bipolar random impulses. `density` is average impulses per second.
+- `LFNoise0.kr(freq: 500.0, mul: 1.0, add: 0.0)`: Step noise (random levels held for `1/freq` seconds).
+- `LFNoise1.kr(freq: 500.0, mul: 1.0, add: 0.0)`: Ramp noise (random slopes, new target value every `1/freq` seconds).
+
+---
+
+### Input
+
+- `In.ar(bus: 0, numChannels: 1)`: Reads an audio signal from a bus.
+- `AudioIn.ar(bus: 0, numChannels: 1)`: Reads audio from the server's audio inputs (e.g., microphone). (Typically `numChannels` matches hardware).
+- `SoundIn.ar(bus: 0, mul: 1.0, add: 0.0)`: Reads audio input from the ADC. (Arguments can vary; often `bus` refers to an array of input channels, e.g., `SoundIn.ar([0,1])` for stereo).
+- `LocalIn.ar(numChannels: 1, mul: 1.0, add: 0.0)`: Reads from a local bus (feedback within a Synth).
+
+---
+
+### Buffer & Sampling
+
+- `PlayBuf.ar(numChannels, bufnum, rate: 1.0, trigger: 1.0, startPos: 0.0, loop: 0.0, doneAction: 0, mul: 1.0, add: 0.0)`: Plays back a sound buffer.
+- `BufRateScale.kr(bufnum, mul: 1.0, add: 0.0)`: Returns the rate scaler for a buffer to play at its original pitch.
+- `LocalBuf.new(numFrames: 2048, numChannels: 1)`: Allocates a buffer local to the Synth. (Used for FFT, delays, etc. Not a UGen with `.ar` or `.kr` in this context of allocation).
+- `Osc.ar(bufnum, freq: 440.0, phase: 0.0, mul: 1.0, add: 0.0)`: Interpolating wavetable oscillator. (Requires a buffer `bufnum` containing a single cycle waveform).
+
+---
 
 ### Envelope Generators & Control Signals
 
-- `EnvGen.kr(envelope, gate: 1.0, levelScale: 1.0, levelBias: 0.0, timeScale: 1.0, doneAction: 0, mul: 1.0, add: 0.0)`: Envelope generator. (`doneAction: DoneAction.freeSelf` is common).
+- `EnvGen.kr(envelope, gate: 1.0, levelScale: 1.0, levelBias: 0.0, timeScale: 1.0, doneAction: 0, mul: 1.0, add: 0.0)`: Envelope generator. (`envelope` is an `Env` object. `doneAction: Done.freeSelf` is common). `EnvGen.ar` is also possible for audio-rate envelopes.
 - `Line.kr(start: 0.0, end: 1.0, dur: 1.0, doneAction: 0, mul: 1.0, add: 0.0)`: Linear ramp.
 - `XLine.kr(start: 1.0, end: 0.001, dur: 1.0, doneAction: 0, mul: 1.0, add: 0.0)`: Exponential ramp.
-- `Phasor.ar(trig: 0.0, rate: 1.0, start: 0.0, end: 1.0, resetPos: 0.0, mul: 1.0, add: 0.0)`: Resettable linear ramp.
+- `Phasor.ar(trig: 0.0, rate: 1.0, start: 0.0, end: 1.0, resetPos: 0.0, mul: 1.0, add: 0.0)`: Resettable linear ramp (0 to `end` scaled by `rate` per second).
+- `MouseX.kr(minval: 0.0, maxval: 1.0, warp: 0, lag: 0.2, mul: 1.0, add: 0.0)`: Control signal from mouse X-axis position.
+- `MouseY.kr(minval: 0.0, maxval: 1.0, warp: 0, lag: 0.2, mul: 1.0, add: 0.0)`: Control signal from mouse Y-axis position.
+
+---
 
 ### Filters
 
@@ -430,58 +513,103 @@ _(The `Env` class creates envelope shape data objects used by `EnvGen.kr`.)_
 - `BRF.ar(in, freq: 440.0, rq: 1.0, mul: 1.0, add: 0.0)`: Band-reject filter.
 - `RLPF.ar(in, freq: 440.0, rq: 1.0, mul: 1.0, add: 0.0)`: Resonant lowpass filter.
 - `RHPF.ar(in, freq: 440.0, rq: 1.0, mul: 1.0, add: 0.0)`: Resonant highpass filter.
-- `MoogFF.ar(in, freq: 100.0, gain: 2.0, reset: 0.0, mul: 1.0, add: 0.0)`: Moog VCF.
-- `Formlet.ar(in, freq: 440.0, attacktime: 1.0, decaytime: 1.0, mul: 1.0, add: 0.0)`: FOF-like filter.
-- `OnePole.ar(in, coef: 0.5, mul: 1.0, add: 0.0)`: One pole filter.
+- `Resonz.ar(in, freq: 440.0, bwr: 0.5, mul: 1.0, add: 0.0)`: Resonant filter. `bwr` is bandwidth ratio (Q = 1/bwr).
+- `SOS.ar(in, a0: 1.0, a1: 0.0, a2: 0.0, b1: 0.0, b2: 0.0, mul: 1.0, add: 0.0)`: Second Order Section (biquad) filter with direct coefficient control.
+- `MoogFF.ar(in, freq: 100.0, gain: 2.0, reset: 0.0, mul: 1.0, add: 0.0)`: Moog VCF (Voltage Controlled Filter) emulation.
+- `Formlet.ar(in, freq: 440.0, attacktime: 0.01, decaytime: 0.1, mul: 1.0, add: 0.0)`: FOF-like (formant) filter.
+- `OnePole.ar(in, coef: 0.5, mul: 1.0, add: 0.0)`: One pole filter. `coef` close to 1 is lowpass, -1 highpass.
 - `OneZero.ar(in, coef: 0.5, mul: 1.0, add: 0.0)`: One zero filter.
-- `LeakDC.ar(in, coef: 0.995, mul: 1.0, add: 0.0)`: DC blocker.
-- `Ringz.ar(in, freq: 440.0, decaytime: 1.0, mul: 1.0, add: 0.0)`: Ringing filter.
+- `LeakDC.ar(in, coef: 0.995, mul: 1.0, add: 0.0)`: DC blocking filter (a simple high-pass).
+- `Ringz.ar(in, freq: 440.0, decaytime: 1.0, mul: 1.0, add: 0.0)`: Ringing filter (resonator).
 
-### Delay-Based Effects & Modulation
+---
+
+### Delays & Comb Filters
 
 - `DelayN.ar(in, maxdelaytime: 0.2, delaytime: 0.2, mul: 1.0, add: 0.0)`: No-interpolation delay.
 - `DelayL.ar(in, maxdelaytime: 0.2, delaytime: 0.2, mul: 1.0, add: 0.0)`: Linear-interpolation delay.
 - `DelayC.ar(in, maxdelaytime: 0.2, delaytime: 0.2, mul: 1.0, add: 0.0)`: Cubic-interpolation delay.
 - `CombN.ar(in, maxdelaytime: 0.2, delaytime: 0.2, decaytime: 1.0, mul: 1.0, add: 0.0)`: No-interpolation comb filter.
 - `CombL.ar(in, maxdelaytime: 0.2, delaytime: 0.2, decaytime: 1.0, mul: 1.0, add: 0.0)`: Linear-interpolation comb filter.
+- `CombC.ar(in, maxdelaytime: 0.2, delaytime: 0.2, decaytime: 1.0, mul: 1.0, add: 0.0)`: Cubic-interpolation comb filter.
 - `AllpassN.ar(in, maxdelaytime: 0.2, delaytime: 0.2, decaytime: 1.0, mul: 1.0, add: 0.0)`: No-interpolation allpass filter.
+- `AllpassL.ar(in, maxdelaytime: 0.2, delaytime: 0.2, decaytime: 1.0, mul: 1.0, add: 0.0)`: Linear-interpolation allpass filter.
+- `AllpassC.ar(in, maxdelaytime: 0.2, delaytime: 0.2, decaytime: 1.0, mul: 1.0, add: 0.0)`: Cubic-interpolation allpass filter.
+
+---
 
 ### Dynamics
 
-- `Compander.ar(in, control: 0.0, thresh: 0.5, slopeBelow: 1.0, slopeAbove: 1.0, clampTime: 0.01, relaxTime: 0.1, mul: 1.0, add: 0.0)`: Compressor/expander/gate.
-- `Limiter.ar(in, level: 1.0, dur: 0.01, mul: 1.0, add: 0.0)`: Peak limiter.
-- `Normalizer.ar(in, level: 1.0, dur: 0.01, mul: 1.0, add: 0.0)`: Dynamics flattener.
+- `Compander.ar(in, control: 0.0, thresh: 0.5, slopeBelow: 1.0, slopeAbove: 1.0, clampTime: 0.01, relaxTime: 0.1, mul: 1.0, add: 0.0)`: Compressor/expander/gate. `control` is usually `in`.
+- `Limiter.ar(in, level: 1.0, dur: 0.01, mul: 1.0, add: 0.0)`: Peak limiter with lookahead (`dur`).
+- `Normalizer.ar(in, level: 1.0, dur: 0.01, mul: 1.0, add: 0.0)`: Dynamics flattener / lookahead normalizer.
 - `Amplitude.kr(input, attackTime: 0.01, releaseTime: 0.01, mul: 1.0, add: 0.0)`: Amplitude follower.
 
-### Math & Utility (many of these can be methods on UGen signals, e.g. `source.clip(lo, hi)`)
+---
+
+### Pitch & Analysis
+
+- `Pitch.kr(in, initFreq: 440, minFreq: 60, maxFreq: 4000, execFreq: 100, maxBinsPerOctave: 16, median: 1, ampThreshold: 0.01, peakThreshold: 0.5, downSample: 1, clar: 0, mul: 1.0, add: 0.0)`: Pitch tracker. Returns `[freq, hasFreq]`.
+- `Tartini.kr(in, size: 1024, hop: 0.5, minSaliency: 0.2, overlap: 4, mul: 1.0, add: 0.0)`: Pitch tracker (external SC3-plugins). Returns `[freq, hasFreq]`.
+
+---
+
+### Math & Utility
 
 - `Clip.ar(in, lo: 0.0, hi: 1.0, mul: 1.0, add: 0.0)` or `in.clip(lo, hi)`: Clips signal.
 - `Fold.ar(in, lo: 0.0, hi: 1.0, mul: 1.0, add: 0.0)` or `in.fold(lo, hi)`: Folds signal.
 - `Wrap.ar(in, lo: 0.0, hi: 1.0, mul: 1.0, add: 0.0)` or `in.wrap(lo, hi)`: Wraps signal.
-- `Rand.ir(lo: 0.0, hi: 1.0)`: Uniform random number (init-rate).
-- `TRand.kr(lo: 0.0, hi: 1.0, trig: 0, mul: 1.0, add: 0.0)`: Triggered random number.
-- `LFNoise0.kr(freq: 500.0, mul: 1.0, add: 0.0)`: Step noise (random levels).
-- `LFNoise1.kr(freq: 500.0, mul: 1.0, add: 0.0)`: Ramp noise (random slopes).
-- `Lag.kr(in, lagTime: 0.1, mul: 1.0, add: 0.0)` or `in.lag(lagTime)`: Lag generator (smoothing).
-- `Schmidt.kr(in, lo: 0.0, hi: 1.0, mul: 1.0, add: 0.0)`: Schmidt trigger.
+- `Lag.kr(in, lagTime: 0.1, mul: 1.0, add: 0.0)` or `in.lag(lagTime)`: Lag generator (exponential smoothing).
+- `Mix.new(arrayOfSignalsOrFunction)` or `Mix(arrayOfSignals)`: Sums an array of signals. If function, it's evaluated to generate signals. Often used as `Mix.ar { ... }` or `(sig1 + sig2 + sig3)`. For simple summing, `+` operator or `sig.sum` on an array is also common. A direct `Mix.ar` UGen doesn't exist; it's a class method that often returns an `Sum4` or similar optimized summer, or just an array sum. For this reference, `Mix.new([...])` is a good representation.
+- `Schmidt.kr(in, lo: 0.0, hi: 1.0, mul: 1.0, add: 0.0)`: Schmidt trigger (hysteresis).
+- `Rand.ir(lo: 0.0, hi: 1.0)`: Uniform random number (init-rate, generated once when SynthDef is built).
+- `TRand.kr(lo: 0.0, hi: 1.0, trig: 0.0, mul: 1.0, add: 0.0)`: Triggered random number (new value when `trig` transitions from non-positive to positive).
 
-### Output
-
-- `Out.ar(bus: 0, channelsArray)`: Output UGen. For mono: `Out.ar(0, signal)`. For stereo: `Out.ar(0, [leftSignal, rightSignal])`.
-- `ReplaceOut.ar(bus: 0, channelsArray)`: Overwrites bus content.
-- `OffsetOut.ar(bus: 0, channelsArray)`: Adds to bus content.
-- (DiskOut is less common for this workflow; server recording is preferred)
+---
 
 ### Panning & Spatialization
 
 - `Pan2.ar(in, pos: 0.0, level: 1.0, mul: 1.0, add: 0.0)`: Equal-power two-channel panner.
 - `LinPan2.ar(in, pos: 0.0, level: 1.0, mul: 1.0, add: 0.0)`: Linear two-channel panner.
-- `Balance2.ar(left, right, pos: 0.0, level: 1.0, mul: 1.0, add: 0.0)`: Stereo balance.
-- `XFade.ar(inA, inB, pan: 0.0, level: 1.0, mul: 1.0, add: 0.0)`: Equal-power crossfader.
+- `Balance2.ar(left, right, pos: 0.0, level: 1.0, mul: 1.0, add: 0.0)`: Stereo balance (adjusts levels of left/right inputs).
+- `XFade.ar(inA, inB, pan: 0.0, level: 1.0, mul: 1.0, add: 0.0)`: Equal-power crossfader. `pan` is crossfade position (-1 for inA, 1 for inB).
+
+---
 
 ### Reverbs
 
-- `FreeVerb.ar(in, mix: 0.33, room: 0.5, damp: 0.5, mul: 1.0, add: 0.0)`: Schroeder reverberator.
-- `GVerb.ar(in, roomsize: 10.0, revtime: 3.0, damping: 0.5, inputbw: 0.5, spread: 15.0, drylevel: 1.0, earlyreflevel: 0.7, taillevel: 0.5, maxroomsize: 300.0, mul: 1.0, add: 0.0)`: Schroeder reverberator with more controls.
+- `FreeVerb.ar(in, mix: 0.33, room: 0.5, damp: 0.5, mul: 1.0, add: 0.0)`: Schroeder reverberator (popular, versatile).
+- `GVerb.ar(in, roomsize: 10.0, revtime: 3.0, damping: 0.5, inputbw: 0.5, spread: 15.0, drylevel: 1.0, earlyreflevel: 0.7, taillevel: 0.5, maxroomsize: 300.0, mul: 1.0, add: 0.0)`: Schroeder reverberator with more detailed controls.
+
+---
+
+### Frequency Domain Effects (FFT)
+
+_(Note: FFT effects involve a chain: `FFT` -> `PV_UGen(s)` -> `IFFT`. `LocalBuf` is used to create the buffer for FFT data. PV_UGens typically return a new FFT chain, not an audio signal directly.)_
+
+- `FFT.new(buffer, in, hop: 0.5, wintype: 0, winsize: 0)`: Performs Fast Fourier Transform. `buffer` is a `LocalBuf`. `wintype` 0 is Hann, 1 is sine. `winsize` 0 means buffer size. Returns an FFT chain.
+- `IFFT.new(chain, wintype: 0, winsize: 0)`: Performs Inverse Fast Fourier Transform. Converts FFT data back to time domain. (This UGen will have `.ar` implicitly when used to generate sound).
+
+#### Phase Vocoder (PV\_) UGens (operate on FFT chains)
+
+- `PV_MagAbove.new(chain, threshold: 0.0)`: Passes bins whose magnitudes are above a threshold.
+- `PV_BrickWall.new(chain, wipe: 0.0)`: Clears bins above (`wipe` > 0) or below (`wipe` < 0) a cutoff point (fraction of Nyquist).
+- `PV_RectComb.new(chain, numTeeth: 8, phase: 0.0, width: 0.5)`: Creates a series of gaps (teeth) in the spectrum.
+- `PV_MagFreeze.new(chain, freeze: 0.0)`: Freezes magnitudes when `freeze` > 0.
+- `PV_CopyPhase.new(chainA, chainB)`: Combines magnitudes of `chainA` with phases of `chainB`.
+- `PV_MagSmear.new(chain, bins: 1.0)`: Averages a bin's magnitude with its `bins` neighbours. (bins is float 0-1 for proportion of window)
+- `PV_Morph.new(chainA, chainB, morphPos: 0.0)`: Morphs magnitudes and phases between two FFT chains. `morphPos` from 0 (A) to 1 (B).
+- `PV_XFade.new(chainA, chainB, xfadePos: 0.0)`: Interpolates (crossfades) bins between two FFT chains. `xfadePos` from 0 (A) to 1 (B).
+- `PV_SoftWipe.new(chainA, chainB, wipePos: 0.0)`: Copies low bins from `chainA` and high bins from `chainB`, with `wipePos` as the crossover.
+- `PV_MagMinus.new(chainA, chainB)`: Subtracts `chainB`'s magnitudes from `chainA`'s.
+
+---
+
+### Output
+
+- `Out.ar(bus: 0, channelsArray)`: Output UGen. For mono: `Out.ar(0, signal)`. For stereo: `Out.ar(0, [leftSignal, rightSignal])`.
+- `ReplaceOut.ar(bus: 0, channelsArray)`: Overwrites bus content.
+- `OffsetOut.ar(bus: 0, channelsArray)`: Adds to bus content (mixes with existing signal on the bus).
+- `LocalOut.ar(channelsArray, mul: 1.0, add: 0.0)`: Writes to a local bus (feedback within a Synth).
 
 ---

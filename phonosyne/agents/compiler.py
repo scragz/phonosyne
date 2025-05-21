@@ -43,8 +43,7 @@ from agents import (
 
 from phonosyne import settings
 from phonosyne.agents.schemas import AnalyzerOutput  # Conceptual input schema
-from phonosyne.tools import validate_audio_file  # Removed execute_python_dsp_code
-from phonosyne.utils.exec_env import run_supercollider_code  # Added new tool
+from phonosyne.tools import run_supercollider_code, validate_audio_file
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,7 @@ class CompilerAgent(Agent):
 
         # The tools available to this agent
         agent_tools = [
-            run_supercollider_code,  # Changed from execute_python_dsp_code
+            run_supercollider_code,
             validate_audio_file,
         ]
 

@@ -7,8 +7,10 @@ from agents import (
 
 from phonosyne import settings
 from phonosyne.agents.schemas import AnalyzerOutput  # Conceptual input schema
-from phonosyne.tools import (execute_python_dsp_code, validate_audio_file,
-                             run_supercollider_code_tool)  # MODIFIED: Added run_supercollider_code_tool
+from phonosyne.tools import (
+    run_supercollider_code_tool,  # MODIFIED: Added run_supercollider_code_tool
+)
+from phonosyne.tools import execute_python_dsp_code, validate_audio_file
 
 logger = logging.getLogger(__name__)
 

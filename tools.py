@@ -5,7 +5,9 @@ from pathlib import Path
 
 from agents import function_tool
 
-from phonosyne.utils.exec_env import CodeExecutionError
+from phonosyne.utils.exec_env import (
+    CodeExecutionError,
+)
 from phonosyne.utils.exec_env import (
     run_supercollider_code as existing_run_supercollider_code,
 )

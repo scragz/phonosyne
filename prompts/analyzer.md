@@ -43,7 +43,15 @@ Your entire output **MUST** be a single line of valid JSON. Do not wrap it in ma
   - Be **descriptive** but concise, aiming for at least 200 words.
   - **No** JSON, code, or markup inside this string.
 
-Available effects (names only): `autowah`, `chorus`, `compressor`, `delay`, `distortion`, `dub_echo`, `echo`, `flanger`, `fuzz`, `long_reverb`, `noise_gate`, `overdrive`, `particle`, `phaser`, `rainbow_machine`, `short_reverb`, `tremolo`, `vibrato`.
+### Available effects (names only)
+
+#### Time domain
+
+DelayN (Delay), DelayL (Delay), DelayC (Delay), CombN (Comb Delay), CombL (Comb Delay), CombC (Comb Delay), AllpassN (Allpass Delay/Filter), AllpassL (Allpass Delay/Filter), AllpassC (Allpass Delay/Filter), Impulse, MouseX, Saw, WhiteNoise, PlayBuf, BufRateScale, SoundIn, LFPulse, Mix, AudioIn, SinOsc, LFPar, In, LocalIn, LocalOut, Out, Compander (Compressor/Limiter/Sustainer/Noise Gate), LeakDC, Normalizer (Normalizer), Limiter (Limiter UGen), Amplitude (Amplitude Follower), Pitch (Pitch Tracker), EnvGen, LPF (Low Pass Filter), RLPF (Resonant Low Pass Filter), HPF (High Pass Filter), RHPF (Resonant High Pass Filter), BPF (Band Pass Filter), BRF (Band Reject Filter), SOS (Biquad Filter), FSinOsc, XLine, Resonz (Resonant Filter), Lag, VarSaw, Tartini (Pitch Tracker), Blip.
+
+#### Frequency domain
+
+FFT, IFFT, LocalBuf, PV_MagAbove (MagAbove), PV_BrickWall (BrickWall Filter), PV_RectComb (RectComb), LFTri, PV_MagFreeze (MagFreeze), PV_CopyPhase (CopyPhase), PV_MagSmear (Magnitude Smear), PV_Morph (Morph), PV_XFade (XFade), PV_SoftWipe (Softwipe), PV_MagMinus (MagMinus / Spectral Subtraction), LFNoise0, LFPar
 
 ## Global prohibitions
 
