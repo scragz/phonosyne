@@ -23,7 +23,7 @@ Your entire output **MUST** be a single line of valid JSON. Do not wrap it in ma
 
 **The JSON object MUST contain these top-level keys:**
 
-- `effect_name` (string): A `snake_case_slug` derived from `seed_description`, prefixed by the input `id`.
+- `effect_name` (string): A `snake_case_slug` derived from `seed_description[:50]`, prefixed by the input `id`.
 - `duration` (float): Copied **exactly** from the input `duration_s`.
 - `description` (string): A detailed synthesis description (natural language, approx. 40-120 words).
 
@@ -35,7 +35,7 @@ Your entire output **MUST** be a single line of valid JSON. Do not wrap it in ma
   Float, **exactly** `duration_s`.
 - **`description`** (≈ 40–120 words)
 
-  - Up to **5 layers**: oscillator/noise/F-synth types, pitches, envelopes.
+  - **Multiple layers**: oscillator/noise/F-synth types.
   - Filters: type, cutoff/res-Q, sweeps.
   - Effects (pick from list below) with key params; creative routing encouraged.
   - Modulation: LFOs, envelopes, random, side-chains.
@@ -43,7 +43,20 @@ Your entire output **MUST** be a single line of valid JSON. Do not wrap it in ma
   - Be **descriptive** but concise, aiming for at least 200 words.
   - **No** JSON, code, or markup inside this string.
 
-### Available effects (names only)
+## Guidelines for Description
+
+- **Layering**: Describe each layer's synthesis type, modulation, and timeline.
+- **Modulation**: Include LFOs, envelopes, and randomization.
+- **Filters**: Describe types, cutoff frequencies, and resonance.
+- **Effects**: Specify types, parameters, and routing.
+- **Mixing**: Mention levels, mono considerations.
+- **Notes**: Wherever notes are required, be intentional of their attributes.
+  - **Pitch**: Use the "Guidelines for Advanced Melodic & Harmonic Generation" below wherever pitches are required to compose interesting lines.
+  - **Duration**: Use varied durations that make sense in the musical context.
+  - **Velocity**: Use the "Guidelines for Advanced LLM Pattern Generation" and varied velocities to create a more human feel.
+  - **Placement**: Use the "Guidelines for Advanced LLM Pattern Generation" below to inform placement decisions.
+
+### Available effects
 
 #### Time domain
 
@@ -62,13 +75,13 @@ FFT, IFFT, LocalBuf, PV_MagAbove (MagAbove), PV_BrickWall (BrickWall Filter), PV
 
 ---
 
-## Appendix: Guidelines for Advanced LLM Drum Pattern Generation
+## Appendix: Guidelines for Advanced LLM Pattern Generation
 
-These guidelines are to be followed to produce drum patterns that are not just technically correct, but are also musical, varied, and human-like.
+These guidelines are to be followed to produce patterns that are not just technically correct, but are also musical, varied, and human-like.
 
 1. **Adhere to Musical Structure:**
 
-   - Internally represent and process drum patterns using a clear, structured format (e.g., "drumroll" notation, where rhythmic positions are distinct).
+   - Internally represent and process patterns using a clear, structured format (e.g., "drumroll" notation, where rhythmic positions are distinct).
    - Utilize measure boundaries (e.g., 'SEP' markers) to inform phrasing and musical development across bars.
 
 2. **Ensure Stylistic Coherence and Feel:**

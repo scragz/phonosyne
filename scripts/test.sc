@@ -4,7 +4,6 @@ var gEffectName = "MySound";
 
 (
     Routine { // Wrap entire logic in a top-level Routine
-        // Agent-embedded parameters from recipe_json
         var p_freq = 440.0;
         var p_amp = 0.2;
         var p_attack = 0.05;    // Attack segment duration

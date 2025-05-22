@@ -164,22 +164,117 @@ def run_supercollider_code(
             text=True,
             encoding="utf-8",
         )
-        stdout, stderr = process.communicate()  # Wait for completion
 
-        if process.returncode != 0:
-            error_message = (
-                f"sclang execution failed for {temp_scd_file_path_str} (targeting {output_filename}).\\n"
-                f"Return code: {process.returncode}\\n"
-                f"STDOUT:\\n{stdout}\\n"
+        # Calculate timeout: recipe_duration + buffer (e.g., 60 seconds)
+        # Ensure recipe_duration is positive, default to a base if not sensible.
+        safe_recipe_duration = (
+            recipe_duration if recipe_duration > 0 else 15.0
+        )  # Default to 15s if duration is zero or negative
+        timeout_seconds = safe_recipe_duration + 10.0  # Add 10 seconds buffer
+        logger.info(f"sclang process timeout set to: {timeout_seconds:.2f} seconds")
+
+        stdout = ""
+        stderr = ""
+        timed_out = False
+
+        try:
+            stdout, stderr = process.communicate(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            logger.error(
+                f"sclang process timed out after {timeout_seconds:.2f} seconds for {temp_scd_file_path_str}."
+            )
+            process.kill()  # Ensure the process is terminated
+            # Try to get any remaining output after killing
+            try:
+                stdout_after_kill, stderr_after_kill = process.communicate(
+                    timeout=5
+                )  # Short timeout for cleanup
+                stdout += stdout_after_kill
+                stderr += stderr_after_kill
+            except Exception as e_comm_kill:
+                logger.warning(
+                    f"Error getting output after killing timed-out sclang process: {e_comm_kill}"
+                )
+            timed_out = True
+            # Ensure returncode is set, as it might not be if killed due to timeout before normal exit
+            if process.returncode is None:
+                # Simulate a non-zero exit code for timeout scenarios if not already set
+                # This helps existing error detection logic.
+                # However, Popen objects might not allow setting returncode directly.
+                # The 'timed_out' flag will be the primary indicator.
+                pass  # process.returncode will be what it is after kill (often -SIGTERM or similar)
+
+        # Check for errors based on return code OR specific stderr content OR timeout
+        error_detected = False
+        # Prepare a detailed message for logging, in case of errors or for verbose debugging
+        full_process_output_details = (
+            f"sclang process details for {temp_scd_file_path_str} (targeting {output_filename}):\\n"
+            f"Return code: {process.returncode}\\n"
+            f"STDOUT:\\n{stdout}\\n"
+            f"STDERR:\\n{stderr}"
+        )
+
+        if timed_out:
+            logger.error(
+                f"sclang execution failed due to timeout.\\n{full_process_output_details}"
+            )
+            error_detected = True
+        elif process.returncode != 0:
+            logger.error(
+                f"sclang execution failed with non-zero exit code.\\n{full_process_output_details}"
+            )
+            error_detected = True
+        elif stderr:  # Check stderr even if return code is 0
+            # Common SuperCollider error indicators, checked case-insensitively
+            error_keywords_lower = [
+                "error:",
+                "primitive",
+                "failure in server",
+                "failure /n",
+                "doesnotunderstanderror",
+                "exception:",
+                "failed.",
+                "hang",
+                "segmentation fault",
+                "illegal instruction",
+                "server not running",  # General server issue
+                "localhost not running", # Specific to localhost, common default
+                "could not send synthdef", # Specific error from user log
+                "not understood", # For messages like "'disable' not understood"
+            ]
+            stderr_lower = stderr.lower()
+            for keyword in error_keywords_lower:
+                if keyword in stderr_lower:
+                    logger.error(
+                        f"sclang execution reported errors in STDERR (keyword: '{keyword}') "
+                        f"despite exit code {process.returncode}.\\n{full_process_output_details}"
+                    )
+                    error_detected = True
+                    break
+
+        if error_detected:
+            # Construct a potentially truncated message for the exception
+            max_stdout_len = 1000
+            stdout_for_exception = stdout[:max_stdout_len] + (
+                "..." if len(stdout) > max_stdout_len else ""
+            )
+
+            exception_message = (
+                f"sclang execution failed or reported errors for {temp_scd_file_path_str} (targeting {output_filename}).\\n"
+                f"Return code: {process.returncode}. Check logs for full STDOUT/STDERR.\\n"
+                f"STDOUT (up to {max_stdout_len} chars):\\n{stdout_for_exception}\\n"
                 f"STDERR:\\n{stderr}"
             )
-            logger.error(error_message)
-            raise CodeExecutionError(error_message)
+            raise CodeExecutionError(exception_message)
         else:
+            # This means return code is 0 AND no critical errors found in stderr
             logger.info(f"sclang execution successful for {temp_scd_file_path_str}.")
-            logger.debug(f"sclang STDOUT:\\n{stdout}")
+            # Log STDOUT and STDERR (if any) at debug level for successful runs
+            logger.debug(f"sclang STDOUT for {temp_scd_file_path_str}:\\n{stdout}")
             if stderr:
-                logger.debug(f"sclang STDERR:\\n{stderr}")
+                logger.debug(
+                    f"sclang STDERR (non-critical, warnings, etc.) for {temp_scd_file_path_str}:\\n{stderr}"
+                )
 
     except FileNotFoundError:
         err_msg = f"sclang executable not found at '{sclang_path}'. Please ensure SuperCollider is installed and sclang is in your PATH or provide the correct path."

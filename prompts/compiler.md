@@ -58,7 +58,7 @@ INIT
  └─> GENERATE_CODE
       └─> EXECUTE_CODE  (tool: run_supercollider_code)
            ├─ error ──┐
-           │          ↓
+           │          ↓  retry ≤ 10
            └─> VALIDATE_AUDIO (tool: validate_audio_file)
                     ├─ error ──┐
                     │          ↓  retry ≤ 10
@@ -80,14 +80,14 @@ Let `base_temp_output_dir = "/Users/scragz/Projects/phonosyne/output/exec_env_ou
 
    - If `n == 1` (first attempt):
      - Parse your main input JSON string to get the `recipe_json` object and `output_dir_context` string. Let `parsed_recipe_object` be this `recipe_json` object.
-     - Access `effect_name_str = parsed_recipe_object.get("effect_name")` (string), `duration_float = parsed_recipe_object.get("duration")` (float), and `description_str = parsed_recipe_object.get("description")` (string) from `parsed_recipe_object`.
-     - If `effect_name_str` is missing or not a string, or if `duration_float` is missing or not a positive number, or if `description_str` is missing or not a string, immediately return: `Error: Incomplete or invalid recipe_json (missing/invalid top-level effect_name, duration, or description).`
+     - Access `effect_name = parsed_recipe_object.get("effect_name")` (string), `duration = parsed_recipe_object.get("duration")` (float), and `description = parsed_recipe_object.get("description")` (string) from `parsed_recipe_object`.
+     - If `effect_name` is missing or not a string, or if `duration` is missing or not a positive number, or if `description` is missing or not a string, immediately return: `Error: Incomplete or invalid recipe_json (missing/invalid top-level effect_name, duration, or description).`
      - Store all other synthesis parameters from `parsed_recipe_object` for use in SuperCollider code generation.
-   - Define an `output_filename_stem` (string) for the current attempt, e.g., `f"{effect_name_str.replace(' ', '_')[:40]}_attempt{n}"`. Max 50 chars for the stem.
+   - Define an `output_filename_stem` (string) for the current attempt, e.g., `f"{effect_name.replace(' ', '_')[:40]}_attempt{n}"`. Max 50 chars for the stem.
    - Construct the `absolute_temp_wav_path` (string) e.g., `f"{base_temp_output_dir}/{output_filename_stem}.wav"`.
    - Create a full SuperCollider language script (`code_string`) that, when executed by `sclang` (with `scsynth` running), will:
      - Assume a running SuperCollider server (`s` or `Server.default`).
-     - **Embed/Define SC Variables**: At the beginning of your script (within the main `{}.value` block), define SuperCollider variables for `gAbsoluteOutputWavPath` (using the `absolute_temp_wav_path` you just constructed), `gRecipeDuration` (using `duration_float`), `gEffectName` (using `effect_name_str`), and all other synthesis parameters (frequencies, amplitudes, envelope times, etc.) from `parsed_recipe_object`.
+     - **Embed/Define SC Variables**: At the beginning of your script (within the main `{}.value` block), define SuperCollider variables for `gAbsoluteOutputWavPath` (using the `absolute_temp_wav_path` you just constructed), `gRecipeDuration` (using `duration`), `gEffectName` (using `effect_name`), and all other synthesis parameters (frequencies, amplitudes, envelope times, etc.) from `parsed_recipe_object`.
      - Define a `SynthDef`. The `SynthDef` name should be unique, perhaps incorporating `gEffectName`.
      - The SuperCollider `SynthDef` should be designed to keep signal levels approximately within `[-1, 1]`. It is **mandatory** to apply `.tanh` to the final signal before output to help ensure it maps to this range.
      - The script must use the SC variable `gAbsoluteOutputWavPath` (that you defined within the script) as the file path for recording.
@@ -99,13 +99,13 @@ Let `base_temp_output_dir = "/Users/scragz/Projects/phonosyne/output/exec_env_ou
    - **CRITICAL NEXT STEP: EXECUTE CODE**: You have now defined `code_string` and `absolute_temp_wav_path`. Your very next action **must** be to invoke the `run_supercollider_code` tool. Provide it with:
      - `code`: the `code_string` you just generated.
      - `output_filename`: the `absolute_temp_wav_path` you constructed.
-     - `effect_name`: the `effect_name_str` you extracted.
-     - `recipe_duration`: the `duration_float` you extracted.
+     - `effect_name`: the `effect_name` you extracted.
+     - `recipe_duration`: the `duration` you extracted.
    - This is step 2 of your workflow. Do not output any other text, explanations, or summaries before making this tool call. Proceed directly to calling `run_supercollider_code`.
 
 2. **EXECUTE_CODE**
 
-   - Call `run_supercollider_code` with the generated `code_string`, the `absolute_temp_wav_path`, `effect_name_str`, and `duration_float`.
+   - Call `run_supercollider_code` with the generated `code_string`, the `absolute_temp_wav_path`, `effect_name`, and `duration`.
    - Let `execution_result` be the string returned by the tool.
    - If `execution_result` starts with "Error:", or if it does not exactly match the `absolute_temp_wav_path` you provided (indicating the tool might have failed before even trying to write, or there's a path mismatch):
      - Store `execution_result` as the current error message in `last_error_context`. Also include `last_generated_code_string` in `last_error_context` for debugging the next generation attempt.
@@ -152,7 +152,7 @@ You (the agent) are responsible for defining the necessary variables at the begi
 ```supercollider
 // Your generated script starts here, wrapped in ( { ... }.value ):
 (
-    {   // Start of function block for local scoping
+    Routine { // Wrap entire logic in a top-level Routine
         // --- Values embedded by Phonosyne SC CompilerAgent ---
         // These variables are DEFINED BY YOU (THE AGENT) based on the input recipe
         // and the constructed absolute output path.
@@ -161,6 +161,15 @@ You (the agent) are responsible for defining the necessary variables at the begi
         var gEffectName = "MyCoolEffect";     // Example: Agent embeds from recipe_json.effect_name
         // ... other synthesis parameters as SC variables ...
         // --- End Embedded Values ---
+
+        // Ensure server is running before proceeding
+        if (server.serverRunning.not) {
+            "SC: Server not running, attempting to boot...".postln;
+            server.bootSync; // Boot and wait for completion - now inside a Routine
+            "SC: Server booted.".postln;
+        } {
+            "SC: Server already running.".postln;
+        };
 
         // Your script logic (sections B, C, D below) goes here...
 
@@ -173,7 +182,7 @@ This explicitly tells the agent its responsibility for defining these variables 
 
 ---
 
-### B. Agent-Embedded Synthesis Parameters (Now part of Section A)
+### B. Agent-Embedded Synthesis Parameters
 
 **Purpose**: Inject values from the `recipe_json` into the SuperCollider script as local variables within your script's main function scope. This is now covered by the updated Section A. Ensure all parameters from `recipe_json` (like `p_frequency`, `p_amplitude`, `p_attackTime`, `p_releaseTime`) are defined as SC variables in Section A.
 
@@ -254,7 +263,7 @@ SynthDef(gEffectName ++ "_SynthDef", { |outBus = 0, gate = 1, masterAmp = 0.1, f
 
 **Structure (inside the `{ ... }` block, after SynthDef creation)**:
 
-````supercollider
+```supercollider
 // This Routine is for recording and synth playback.
 // It assumes the server is booted and SynthDef is added,
 // which should be handled by an outer Routine or setup block.
@@ -310,7 +319,8 @@ Routine {
     (0.1).wait;
     "SC: Script finished. Quitting sclang.".postln;
     0.exit;
-}.play(AppClock); // Play the routine; AppClock is typical for timed operations.```
+}.play(AppClock); // Play the routine; AppClock is typical for timed operations.
+```
 
 **Important Tips**:
 
@@ -326,7 +336,8 @@ Routine {
 
 Failure to follow these rules will lead to errors in the generated SuperCollider script.
 
-- **Declare all function variables** at the start of your script (inside the `{ ... }` block) and at the beginning of each def to avoid scope issues.
+- **Declare all function variables**: At the start of your script (inside the `{ ... }` block) and at the beginning of each def, declare ALL `var`s BEFORE any other operations or it will result in an error.
+- **Boot the server**: Always check if the server is running and boot it if not. Use `server.bootSync` to ensure it is ready before proceeding.
 - **Multiple by -1 for negative variables**: If you need to invert a variable (e.g., for phase), use `-1 * variableName` instead of `-variableName`.
 
 ---
@@ -421,7 +432,7 @@ var gEffectName = "MySound";
 
     }.play(AppClock); // Play the new top-level Routine
 )
-````
+```
 
 ---
 
@@ -562,7 +573,7 @@ _(The `Env` class creates envelope shape data objects used by `EnvGen`.)_
 - `Lag.kr(in, lagTime: 0.1, mul: 1.0, add: 0.0)` or `in.lag(lagTime)`: Lag generator (exponential smoothing).
 - `Mix.new(arrayOfSignalsOrFunction)` or `Mix(arrayOfSignals)`: Sums an array of signals. If function, it's evaluated to generate signals. Often used as `Mix.ar { ... }` or `(sig1 + sig2 + sig3)`. For simple summing, `+` operator or `sig.sum` on an array is also common. A direct `Mix.ar` UGen doesn't exist; it's a class method that often returns an `Sum4` or similar optimized summer, or just an array sum. For this reference, `Mix.new([...])` is a good representation.
 - `Schmidt.kr(in, lo: 0.0, hi: 1.0, mul: 1.0, add: 0.0)`: Schmidt trigger (hysteresis).
-- `Rand.ir(lo: 0.0, hi: 1.0)`: Uniform random number (init-rate, generated once when SynthDef is built).
+- `Rand(0.0, 1.0)`: Uniform random number (init-rate, generated once when SynthDef is built).
 - `TRand.kr(lo: 0.0, hi: 1.0, trig: 0.0, mul: 1.0, add: 0.0)`: Triggered random number (new value when `trig` transitions from non-positive to positive).
 
 ---
