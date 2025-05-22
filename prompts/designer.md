@@ -52,13 +52,13 @@ Movement 6 :  L6.1 , L6.2 , A6
 | key                | type  | strict rule                                |
 | ------------------ | ----- | ------------------------------------------ |
 | `id`               | str   | Pattern above (`L{n}.1`, `L{n}.2`, `A{n}`) |
-| `duration_s`       | float | L-IDs: 10.0 ≤ x ≤ 30.0 · A-IDs: **13.0**   |
+| `duration`         | float | L-IDs: 10.0 ≤ x ≤ 30.0 · A-IDs: **13.0**   |
 | `seed_description` | str   | ≤ 60 words, vivid + technical (see §6)     |
 
 ### Example sample object (fragment)
 
 ```
-{"id":"L3.1","duration_s":26.0,
+{"id":"L3.1","duration":26.0,
  "seed_description":"Rattling sub-pressure drone at 40 Hz swells for 8 s, overlaid with metallic FM shards panning in 45° arcs, low-pass swept 300→2 kHz by slow envelope, gated into grain clouds, finally folding back into the sub floor for a seamless loop."}
 ```
 

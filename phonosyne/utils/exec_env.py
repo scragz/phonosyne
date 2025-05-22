@@ -61,7 +61,7 @@ class SecurityException(CodeExecutionError):  # Keep for compatibility if used e
 def run_supercollider_code(
     code: str,
     output_filename: str,
-    recipe_duration: float = 15.0,
+    duration: float = 15.0,
     effect_name: str | None = None,
     sclang_executable_path: str = "sclang",
     scsynth_executable_path: str = "scsynth",
@@ -79,7 +79,7 @@ def run_supercollider_code(
               OSC handlers (e.g., for /phonosyne/render, /phonosyne/stop),
               and should NOT call 0.exit itself. It relies on Python for control.
         output_filename: Absolute path for the output .wav file.
-        recipe_duration: Target duration in seconds for the audio.
+        duration: Target duration in seconds for the audio.
         effect_name: Optional name for the effect.
         sclang_executable_path: Path to the sclang executable.
         scsynth_executable_path: Path to the scsynth executable.
@@ -104,7 +104,7 @@ def run_supercollider_code(
     logger.info(
         f"Initiating SuperCollider OSC-controlled execution for: '{output_filename}'"
     )
-    logger.debug(f"Target duration: {recipe_duration}s, Effect name: {effect_name}")
+    logger.debug(f"Target duration: {duration}s, Effect name: {effect_name}")
     logger.debug(
         f"sclang: {sclang_executable_path}, scsynth: {scsynth_executable_path}"
     )
@@ -128,10 +128,10 @@ def run_supercollider_code(
     scsynth_proc = None
     sclang_proc = None
 
-    safe_recipe_duration = recipe_duration if recipe_duration > 0 else 15.0
+    safe_duration = duration if duration > 0 else 15.0
     # Increased buffer for OSC model: setup time, OSC comms, file writing buffer
     operation_buffer_seconds = getattr(settings, "SCLANG_TIMEOUT_BUFFER_SECONDS", 30.0)
-    overall_timeout_seconds = safe_recipe_duration + operation_buffer_seconds
+    overall_timeout_seconds = safe_duration + operation_buffer_seconds
     operation_start_time = time.monotonic()
 
     error_keywords_lower = [
@@ -560,18 +560,18 @@ def run_supercollider_code(
             address="/phonosyne/render"
         )
         render_msg_builder.add_arg(str(actual_wav_path))
-        render_msg_builder.add_arg(safe_recipe_duration)
+        render_msg_builder.add_arg(safe_duration)
         # The SC script OSCdef for /phonosyne/render expects: path (string), duration (float)
         # The effect_name was removed from the SC script's OSCdef for /phonosyne/render
         # render_msg_builder.add_string(effect_name if effect_name else "unknown_effect")
         osc_client.send(render_msg_builder.build())
 
         logger.info(
-            f"Waiting for recipe duration ({safe_recipe_duration}s) while sclang/scsynth operate..."
+            f"Waiting for recipe duration ({safe_duration}s) while sclang/scsynth operate..."
         )
 
         # Monitor sclang output and overall timeout during recipe duration
-        recipe_end_time = time.monotonic() + safe_recipe_duration
+        recipe_end_time = time.monotonic() + safe_duration
         timed_out_during_recipe = False
 
         while time.monotonic() < recipe_end_time:
@@ -825,7 +825,7 @@ def run_supercollider_code(
 
 # If you have a run_python_code function, it would go here.
 # For example:
-# def run_python_code(code: str, output_filename: str, recipe_duration: float, effect_name: str | None = None) -> Path:
+# def run_python_code(code: str, output_filename: str, duration: float, effect_name: str | None = None) -> Path:
 #     logger.warning("run_python_code is not fully implemented in this refactoring pass.")
 #     # ... (original run_python_code logic if it exists and is separate) ...
 #     raise NotImplementedError("run_python_code needs to be reviewed/reinstated if used.")

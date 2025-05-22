@@ -42,7 +42,7 @@ The process begins when the user invokes Phonosyne, typically via `phonosyne.sdk
   - `samples`: A list of `SampleStub` structures. Each `SampleStub` contains:
     - `id`: Unique ID for the sample.
     - `seed_description`: A concise textual description of the sound.
-    - `duration_s`: The target duration in seconds.
+    - `duration`: The target duration in seconds.
 - **Data Flow**: `str (user_brief) -> OrchestratorAgent (uses DesignerAgentTool) -> str (JSON plan from DesignerAgent's LLM) -> OrchestratorAgent's LLM (parses to internal DesignerOutput structure)`
 
 ### 3. Sample Generation Loop (Orchestrated by `OrchestratorAgent`'s LLM logic)

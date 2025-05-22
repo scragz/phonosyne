@@ -1,3 +1,4 @@
+// These will be replaced by Python injection if used with run_supercollider_code
 var gAbsoluteOutputWavPath = "/tmp/_sctemp/MySound_attempt_1.wav";
 var gRecipeDuration = 3.0; // Total duration for recording & envelope
 var gEffectName = "MySound";
@@ -33,7 +34,10 @@ var gEffectName = "MySound";
             }).add;
             "SC_LOG: SynthDef added.".postln;
 
-            // Inner Routine for recording
+            // Signal Python that sclang is ready for OSC commands (or further script execution)
+            "Phonosyne SuperCollider script ready".postln;
+
+            // Inner Routine for recording, now inside waitForBoot
             Routine {
                 var targetSampleRate = 48000;
 
@@ -73,6 +77,3 @@ var gEffectName = "MySound";
         }; // End of server.waitForBoot block
     }.play(AppClock); // Play the top-level Routine
 ); // Terminate the main expression block with a semicolon
-
-// Add a ready signal for Python to detect
-"Phonosyne SuperCollider script ready".postln;

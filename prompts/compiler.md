@@ -29,17 +29,17 @@ You will generate an `output_filename_stem` (max 50 characters from `effect_name
 You have access to the following tools. The arguments you provide to these tools will be validated.
 
 - **`run_supercollider_code`**:
-  - **Call signature**: `(code: str, output_filename: str, effect_name: str, recipe_duration: float)`
+  - **Call signature**: `(code: str, output_filename: str, effect_name: str, duration: float)`
   - **Your usage**: When you call this tool, you will provide:
     - `code`: The SuperCollider (`.sc`) language code string you generated.
     - `output_filename`: The **absolute path** (string) where the output `.wav` file must be saved by your SuperCollider script. You will construct this path (see note in Section 1).
     - `effect_name`: The `effect_name` string extracted from the `recipe_json` object.
-    - `recipe_duration`: The `duration` float extracted from the `recipe_json` object.
+    - `duration`: The `duration` float extracted from the `recipe_json` object.
   - **Details of Tool Operation**:
     - The tool takes your SuperCollider `code` and the `output_filename` (absolute path).
     - It executes the `code` using `sclang` against a running `scsynth` server.
     - The SuperCollider script you generate is responsible for:
-      1. Defining/embedding all necessary parameters (like `effect_name`, `recipe_duration`, and other synthesis values from `recipe_json`).
+      1. Defining/embedding all necessary parameters (like `effect_name`, `duration`, and other synthesis values from `recipe_json`).
       2. Using the exact `output_filename` path (which you embedded into the script) for recording its audio output.
   - **Returns**: On success, this tool returns the `output_filename` (string) if the file was created. On failure, it returns an error **string** (e.g., `sclang` error output).
 - **`validate_audio_file`**:
@@ -100,7 +100,7 @@ Let `base_temp_output_dir = "/Users/scragz/Projects/phonosyne/output/exec_env_ou
      - `code`: the `code_string` you just generated.
      - `output_filename`: the `absolute_temp_wav_path` you constructed.
      - `effect_name`: the `effect_name` you extracted.
-     - `recipe_duration`: the `duration` you extracted.
+     - `duration`: the `duration` you extracted.
    - This is step 2 of your workflow. Do not output any other text, explanations, or summaries before making this tool call. Proceed directly to calling `run_supercollider_code`.
 
 2. **EXECUTE_CODE**
@@ -335,81 +335,78 @@ var gEffectName = "MySound";
 
 (
     Routine { // Wrap entire logic in a top-level Routine
-        // Agent-embedded parameters from recipe_json
         var p_freq = 440.0;
         var p_amp = 0.2;
-        var p_attack = 0.05;    // Attack segment duration
-        var p_release = 0.8;   // Release segment duration
-
+        var p_attack = 0.05;
+        var p_release = 0.8;
         var p_sustain;
         var server;
 
-        // Calculate sustain segment duration to make total envelope duration = gRecipeDuration
-        p_sustain = max(0.001, gRecipeDuration - p_attack - p_release); // ensure positive
+        p_sustain = max(0.001, gRecipeDuration - p_attack - p_release);
+        server = Server.default;
 
-        server = Server.default; // Use 'Server.default' for clarity, often aliased to 's'
+        // Ensure sclang waits for the server (started by Python) to be ready
+        server.waitForBoot {
+            "SC_LOG: Server booted or was already running.".postln;
 
-        // Server will already be booted by the agent
-        if (server.serverRunning.not) {
-            error("SC: Server not running").postln;
-        };
+            SynthDef(gEffectName ++ "_SynthDef", { |outBus = 0, gate = 1, masterAmp = 0.1, freq = 440, attackTime = 0.01, sustainTime = 1.0, releaseTime = 0.5|
+                var signal, envelope;
+                envelope = EnvGen.kr(
+                    Env.new([0, 1, 1, 0], [attackTime, sustainTime, releaseTime], curve: -4.0),
+                    gate,
+                    levelScale: masterAmp,
+                    doneAction: Done.freeSelf
+                );
+                signal = SinOsc.ar(freq);
+                signal = signal * envelope;
+                signal = signal.tanh; // MANDATORY tanh
+                Out.ar(outBus, signal);
+            }).add;
+            "SC_LOG: SynthDef added.".postln;
 
-        SynthDef(gEffectName ++ "_SynthDef", { |outBus = 0, gate = 1, masterAmp = 0.1, freq = 440, attackTime = 0.01, sustainTime = 1.0, releaseTime = 0.5|
-            var signal, envelope;
-            envelope = EnvGen.kr(
-                Env.new([0, 1, 1, 0], [attackTime, sustainTime, releaseTime], curve: -4.0),
-                gate,
-                levelScale: masterAmp,
-                doneAction: Done.freeSelf
-            );
-            signal = SinOsc.ar(freq);
-            signal = signal * envelope;
-            signal = signal.tanh; // MANDATORY tanh
-            Out.ar(outBus, signal);
-        }).add; // This now happens after server boot check
+            // Signal Python that sclang is ready for OSC commands (or further script execution)
+            "Phonosyne SuperCollider script ready".postln;
 
-        // SynthDef.add is blocking on local server, no server.sync needed here outside a Routine.
+            // Inner Routine for recording, now inside waitForBoot
+            Routine {
+                var targetSampleRate = 48000;
 
-        // This inner Routine for recording remains, and will be scheduled correctly
-        // as part of the outer Routine's execution flow.
-        Routine {
-            var targetSampleRate = 48000; // Define intended sample rate
+                server.recChannels = 1;
+                server.recHeaderFormat = "WAV";
+                server.recSampleFormat = "float";
+                server.recBufSize = targetSampleRate.nextPowerOfTwo;
 
-            // Set server's recorder properties before calling prepareForRecord
-            server.recChannels = 1;
-            server.recHeaderFormat = "WAV";
-            server.recSampleFormat = "float";
-            server.recBufSize = targetSampleRate.nextPowerOfTwo; // e.g., 65536 for 48kHz
+                "SC_LOG: Preparing for record: ".post; gAbsoluteOutputWavPath.postln;
+                server.prepareForRecord(gAbsoluteOutputWavPath, 1);
+                server.sync;
+                "SC_LOG: Starting record.".postln;
+                server.record;
+                server.sync; // Ensure record command is processed
 
-            // Corrected prepareForRecord call
-            server.prepareForRecord(gAbsoluteOutputWavPath, 1); // path, numChannels
-            server.sync;
-            server.record;
-            server.sync;
+                "SC_LOG: Playing Synth.".postln;
+                Synth(gEffectName ++ "_SynthDef", [
+                    \masterAmp: p_amp,
+                    \freq: p_freq,
+                    \attackTime: p_attack,
+                    \sustainTime: p_sustain,
+                    \releaseTime: p_release
+                ]);
 
-            Synth(gEffectName ++ "_SynthDef", [
-                \masterAmp: p_amp,
-                \freq: p_freq,
-                \attackTime: p_attack,
-                \sustainTime: p_sustain, // Pass the calculated sustain segment duration
-                \releaseTime: p_release
-            ]);
+                "SC_LOG: Waiting for recipe duration: ".post; gRecipeDuration.postln;
+                gRecipeDuration.wait;
 
-            // Wait for the total recipe duration, which matches the envelope's total duration
-            gRecipeDuration.wait;
+                "SC_LOG: Stopping recording.".postln;
+                server.stopRecording;
+                server.sync; // Ensure stopRecording is processed
+                ("SC_LOG: Done recording: " ++ gAbsoluteOutputWavPath).postln;
 
-            server.stopRecording;
-            server.sync;
-            ("SC: Done: " ++ gAbsoluteOutputWavPath).postln;
-
-            // Quit sclang after a short delay to allow messages to flush
-            (0.1).wait;
-            "SC: Script finished. Quitting sclang.".postln;
-            0.exit;
-        }.play(AppClock); // This inner routine is played on AppClock as before
-
-    }.play(AppClock); // Play the new top-level Routine
-)
+                (0.1).wait; // Short delay for messages
+                "SC_LOG: Script finished. Waiting for Python to terminate sclang.".postln;
+                // 0.exit; // Python will terminate sclang via process management
+            }.play(AppClock);
+        }; // End of server.waitForBoot block
+    }.play(AppClock); // Play the top-level Routine
+); // Terminate the main expression block with a semicolon
 ```
 
 ---
@@ -613,3 +610,17 @@ Remember, your job is **finished** only when you either …
 
 - **return** an **absolute file path** to a `.wav` file that has passed `AudioValidationTool`. This file will be located in a predefined temporary execution output directory.
 - **return** a clear error string after **10 failed attempts**.
+
+```text
+INIT
+ └─> GENERATE_CODE
+      └─> EXECUTE_CODE  (tool: run_supercollider_code)
+           ├─ error ──┐
+           │          ↓  retry ≤ 10
+           └─> VALIDATE_AUDIO (tool: validate_audio_file)
+                    ├─ error ──┐
+                    │          ↓  retry ≤ 10
+                    └─> SUCCESS → return absolute_path_to_temp_wav
+                                ↓
+                             FAILURE → return error_string
+```

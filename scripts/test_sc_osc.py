@@ -33,7 +33,7 @@ OUTPUT_WAV_FILENAME = "test_osc_output.wav"
 ABSOLUTE_OUTPUT_WAV_PATH = OUTPUT_DIR / OUTPUT_WAV_FILENAME
 
 # Recipe duration for the test
-RECIPE_DURATION_S = 8.0  # Shorter for testing
+duration = 8.0  # Shorter for testing
 
 # Paths to SuperCollider executables (adjust if not in PATH)
 # On macOS, these are typically in /Applications/SuperCollider.app/Contents/MacOS/
@@ -65,7 +65,7 @@ def main():
 
     logger.info(f"Attempting to generate WAV file: {ABSOLUTE_OUTPUT_WAV_PATH}")
     logger.info(f"Using SuperCollider script: {SCD_FILE_PATH}")
-    logger.info(f"Recipe duration: {RECIPE_DURATION_S} seconds")
+    logger.info(f"Recipe duration: {duration} seconds")
 
     # Set some default settings values if not present, for testing standalone
     if not hasattr(settings, "SCLANG_SETUP_TIMEOUT_SECONDS"):
@@ -88,7 +88,7 @@ def main():
         generated_wav_path = run_supercollider_code(
             code=sc_code_content,
             output_filename=str(ABSOLUTE_OUTPUT_WAV_PATH),
-            recipe_duration=RECIPE_DURATION_S,
+            duration=duration,
             effect_name="osc_test_effect",
             sclang_executable_path=SCLANG_PATH,
             scsynth_executable_path=SCSYNTH_PATH,

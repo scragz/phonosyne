@@ -46,7 +46,7 @@ class SampleStub(BaseModel):
         ...,
         description="Concise natural-language description of the sound sample (max 200 chars as per plan).",
     )
-    duration_s: float = Field(
+    duration: float = Field(
         ...,
         description="Requested duration of the sample in seconds.",
     )
@@ -80,7 +80,7 @@ class AnalyzerInput(BaseModel):
     seed_description: str = Field(
         ..., description="The initial seed description from the DesignerAgent."
     )
-    duration_s: float = Field(..., description="Requested duration in seconds.")
+    duration: float = Field(..., description="Requested duration in seconds.")
     # sample_rate: int = Field(default=settings.DEFAULT_SR, description="Target sample rate in Hz.") # Analyzer prompt implies SR is part of its output
 
 
@@ -128,12 +128,10 @@ if __name__ == "__main__":
 
     # Example SampleStub
     try:
-        sample1 = SampleStub(
-            id="L1.1", seed_description="A test sound.", duration_s=3.5
-        )
+        sample1 = SampleStub(id="L1.1", seed_description="A test sound.", duration=3.5)
         print(f"\nValid SampleStub: {sample1.model_dump_json(indent=2)}")
         sample_invalid_id = SampleStub(
-            id="Invalid", seed_description="Test", duration_s=1.0
+            id="Invalid", seed_description="Test", duration=1.0
         )  # Will pass due to relaxed validation
         print(
             f"SampleStub with potentially 'invalid' ID (passes relaxed validation): {sample_invalid_id.model_dump_json(indent=2)}"
@@ -156,7 +154,7 @@ if __name__ == "__main__":
         analyzer_input = AnalyzerInput(
             id="L1.1",
             seed_description="A warm, evolving pad sound with a slow attack.",
-            duration_s=15.0,
+            duration=15.0,
         )
         print(f"\nValid AnalyzerInput: {analyzer_input.model_dump_json(indent=2)}")
     except Exception as e:
