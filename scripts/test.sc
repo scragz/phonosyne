@@ -1,132 +1,78 @@
+var gAbsoluteOutputWavPath = "/tmp/_sctemp/MySound_attempt_1.wav";
+var gRecipeDuration = 3.0; // Total duration for recording & envelope
+var gEffectName = "MySound";
+
 (
-  "SCRIPT_DEBUG: TOP OF SCRIPT EXECUTION".postln; // ADDED FOR VERY EARLY DEBUG
+    Routine { // Wrap entire logic in a top-level Routine
+        var p_freq = 440.0;
+        var p_amp = 0.2;
+        var p_attack = 0.05;
+        var p_release = 0.8;
+        var p_sustain;
+        var server;
 
-  // Original gEffectName to define the SynthDef name consistently
-  var gEffectName = "L3.1_deep_half_time_bass_drop_glides_down_from_a1_to_f_sharp0_with_pitch_envelope";
-  var synthDefNameForThisScript = ("Synth_" ++ gEffectName).replace(" ", "_").replace(".", "_").replace("#", "Sharp");
+        p_sustain = max(0.001, gRecipeDuration - p_attack - p_release);
+        server = Server.default;
 
-  // Bass drop frequencies
-  var freqStart = 55; // A1
-  var freqEnd = 23.12; // F#0
+        // Ensure sclang waits for the server (started by Python) to be ready
+        server.waitForBoot {
+            "SC_LOG: Server booted or was already running.".postln;
 
-  // Pitch envelope times
-  var pitchEnvAttack = 0.2; // 200 ms sharp drop
-  var pitchEnvDecay = 6.0; // slow decay to target pitch
+            SynthDef(gEffectName ++ "_SynthDef", { |outBus = 0, gate = 1, masterAmp = 0.1, freq = 440, attackTime = 0.01, sustainTime = 1.0, releaseTime = 0.5|
+                var signal, envelope;
+                envelope = EnvGen.kr(
+                    Env.new([0, 1, 1, 0], [attackTime, sustainTime, releaseTime], curve: -4.0),
+                    gate,
+                    levelScale: masterAmp,
+                    doneAction: Done.freeSelf
+                );
+                signal = SinOsc.ar(freq);
+                signal = signal * envelope;
+                signal = signal.tanh; // MANDATORY tanh
+                Out.ar(outBus, signal);
+            }).add;
+            "SC_LOG: SynthDef added.".postln;
 
-  // Wavefolder drive modulation
-  var wavefolderLfoFreq = 0.13;
+            // Inner Routine for recording
+            Routine {
+                var targetSampleRate = 48000;
 
-  // Allpass delay parameters
-  var delayTime = 0.08; // 80 ms
-  var delayFeedback = 0.45;
+                server.recChannels = 1;
+                server.recHeaderFormat = "WAV";
+                server.recSampleFormat = "float";
+                server.recBufSize = targetSampleRate.nextPowerOfTwo;
 
-  // Resonant filter center frequencies
-  var resonzFreq1 = 110;
-  var resonzFreq2 = 220;
-  var resonzSweepRange = 0.08; // ±8%
-  var resonzSweepSpeed = 0.1; // slow random walk speed
+                "SC_LOG: Preparing for record: ".post; gAbsoluteOutputWavPath.postln;
+                server.prepareForRecord(gAbsoluteOutputWavPath, 1);
+                server.sync;
+                "SC_LOG: Starting record.".postln;
+                server.record;
+                server.sync; // Ensure record command is processed
 
-  // Sidechain ducking parameters
-  var duckAmountDb = -6;
-  var duckTime = 0.05; // 50 ms
+                "SC_LOG: Playing Synth.".postln;
+                Synth(gEffectName ++ "_SynthDef", [
+                    \masterAmp: p_amp,
+                    \freq: p_freq,
+                    \attackTime: p_attack,
+                    \sustainTime: p_sustain,
+                    \releaseTime: p_release
+                ]);
 
-  // Percussion parameters
-  var clickAttack = 0.008; // 8 ms
-  var clickDecay = 0.04; // 40 ms
-  var clickHpfFreq = 3000;
-  var clickHpfQ = 0.7;
-  var ringModFreq = 55;
-  var ringDepthMin = 0.3;
-  var ringDepthMax = 0.7;
+                "SC_LOG: Waiting for recipe duration: ".post; gRecipeDuration.postln;
+                gRecipeDuration.wait;
 
-  // Echo parameters
-  var echoDelayMin = 0.42;
-  var echoDelayMax = 0.68;
-  var echoFeedback = 0.38;
-  var echoWetMin = 0.2;
-  var echoWetMax = 0.6;
-  var echoHpfFreq = 180;
+                "SC_LOG: Stopping recording.".postln;
+                server.stopRecording;
+                server.sync; // Ensure stopRecording is processed
+                ("SC_LOG: Done recording: " ++ gAbsoluteOutputWavPath).postln;
 
-  // Jitter parameters
-  var jitterFreq = 0.1;
-  var jitterAmount = 0.002;
+                (0.1).wait; // Short delay for messages
+                "SC_LOG: Script finished. Waiting for Python to terminate sclang.".postln;
+                // 0.exit; // Python will terminate sclang via process management
+            }.play(AppClock);
+        }; // End of server.waitForBoot block
+    }.play(AppClock); // Play the top-level Routine
+); // Terminate the main expression block with a semicolon
 
-  // Percussion dropout interval
-  var dropoutInterval = 7.0;
-
-  var currentSynth;
-  var server = Server.default; // Assuming server is already booted by Python
-
-  "SCRIPT_DEBUG: Variables declared. Setting NetAddr.langPort...".postln;
-  NetAddr.langPort = 57120; // Ensure sclang listens on the default port for OSC
-  "SCRIPT_DEBUG: NetAddr.langPort set to 57120.".postln;
-
-  // Ensure server is running before adding SynthDef.
-  // This might be redundant if Python guarantees server is up, but good for standalone testing.
-  // server.waitForBoot {
-  // "SCRIPT_DEBUG: Server booted (or was already running). Defining SynthDef...".postln;
-
-  "SCRIPT_DEBUG: Defining SynthDef: %".format(synthDefNameForThisScript).postln;
-  SynthDef(synthDefNameForThisScript, {
-    |out = 0, recipeDurationArg = 10.0| // recipeDurationArg will be set by OSC message
-    var bassOsc, pitchEnv, pitch, bassSig, wavefolderDrive, wavefolder, feedbackSig, resonz1, resonz2, resonzMix, sidechainEnv;
-    var percussionEnv, percussionClick, percussionRingMod, percussionSig, percussionVelocity;
-    var echoDelayTime, echoDelay, echoWet, echoSig, echoHpf, echoMix;
-    var jitterPhase, jitterDelayTime, dropoutGate; // jitterDelayTime is defined but not used in original logic
-    var sig, finalSig;
-
-    // Pitch envelope: exponential from freqStart to freqEnd
-    pitchEnv = EnvGen.kr(Env([freqStart, freqEnd], [pitchEnvAttack + pitchEnvDecay], 'exp'), doneAction: 0);
-    pitch = pitchEnv;
-
-    // Bass oscillator mix: 70% sine, 30% saw
-    bassOsc = (SinOsc.ar(pitch) * 0.7) + (Saw.ar(pitch) * 0.3);
-
-    // Wavefolder drive modulated by LFO
-    wavefolderDrive = LFNoise0.kr(wavefolderLfoFreq).range(0.5, 1.5);
-    wavefolder = Shaper.ar(VarSaw.ar(0, 0, 1), wavefolderDrive);
-
-    // Feedback via AllpassC delays
-    feedbackSig = AllpassC.ar(bassOsc + wavefolder, delayTime, delayTime, delayFeedback);
-
-    // Resonz filters with slow random walk modulation
-    resonz1 = Resonz.ar(feedbackSig, resonzFreq1 * (1 + LFNoise1.kr(resonzSweepSpeed).range(-resonzSweepRange, resonzSweepRange)), 0.5);
-    resonz2 = Resonz.ar(feedbackSig, resonzFreq2 * (1 + LFNoise1.kr(resonzSweepSpeed).range(-resonzSweepRange, resonzSweepRange)), 0.5);
-    resonzMix = (resonz1 + resonz2) * 0.5;
-
-    // Sidechain ducking envelope triggered by percussion hits (simulated here as Impulse)
-    sidechainEnv = EnvGen.kr(Env.perc(0.001, duckTime, amp: (10 ** (duckAmountDb / 20))), Impulse.kr(2), doneAction: 0);
-
-    // Percussion: filtered white noise clicks with ring modulation
-    percussionEnv = EnvGen.kr(Env.perc(clickAttack, clickDecay), Impulse.kr(2), doneAction: 0);
-    percussionVelocity = LFNoise1.kr(0.5).range(0.22, 0.47); // velocity variation approx 28-42 scaled
-    percussionClick = HPF.ar(WhiteNoise.ar(0.5), clickHpfFreq, clickHpfQ) * percussionEnv * percussionVelocity;
-    percussionRingMod = SinOsc.ar(ringModFreq) * percussionEnv * LFNoise1.kr(0.5).range(ringDepthMin, ringDepthMax);
-    percussionSig = percussionClick + percussionRingMod;
-
-    // Echo effect chain - uses recipeDurationArg
-    echoDelayTime = LFNoise1.kr(0.07).range(echoDelayMin, echoDelayMax);
-    echoDelay = DelayC.ar(resonzMix + percussionSig, 1.0, echoDelayTime, echoFeedback);
-    echoHpf = HPF.ar(echoDelay, echoHpfFreq);
-    echoWet = Line.kr(echoWetMin, echoWetMax, recipeDurationArg); // Use arg here
-    echoMix = XFade2.ar(resonzMix + percussionSig, echoHpf, echoWet);
-
-    // Jitter injection
-    jitterPhase = LFNoise1.kr(jitterFreq).range(-jitterAmount, jitterAmount);
-    jitterDelayTime = delayTime + jitterPhase; // This variable is defined but not used in subsequent original logic.
-
-    // Percussion dropout every ~7 seconds
-    dropoutGate = Duty.kr(1 / dropoutInterval, 0, 1);
-    percussionSig = percussionSig * dropoutGate;
-
-    // Mix final signal
-    sig = (bassOsc + wavefolder + feedbackSig + resonzMix + percussionSig + echoMix) * sidechainEnv;
-
-    // Mono sum
-    sig = sig.sum * 0.5;
-
-    // Apply tanh for output level control
-    finalSig = sig.tanh;
-
-    Out.ar(out, finalSig ! 2);
-  }).add;
+// Add a ready signal for Python to detect
+"Phonosyne SuperCollider script ready".postln;

@@ -52,13 +52,8 @@ try:
     PROMPT_FILE_PATH = (
         Path(__file__).resolve().parent.parent.parent / "prompts" / "compiler.md"
     )
-    DOCUMENTATION_FILE_PATH = (
-        Path(__file__).resolve().parent.parent.parent / "prompts" / "supercollider.md"
-    )
     with open(PROMPT_FILE_PATH, "r", encoding="utf-8") as f:
         COMPILER_INSTRUCTIONS = f.read()
-    with open(DOCUMENTATION_FILE_PATH, "r", encoding="utf-8") as f:
-        SUPERCOLLIDER_DOCUMENTATION = f.read()
 except FileNotFoundError:
     logger.error(
         f"CRITICAL: Compiler prompt file not found at {PROMPT_FILE_PATH}. "
@@ -99,7 +94,7 @@ class CompilerAgent(Agent):
         # Instructions should now guide the generation of SuperCollider code
         # and usage of run_supercollider_code tool.
         # The prompt file prompts/compiler.md is assumed to be updated accordingly.
-        instructions = f"{COMPILER_INSTRUCTIONS}\\n\\n## Output Directory\\n\\nOutput files to be saved in: {settings.DEFAULT_OUT_DIR}\\n\\n{{SUPERCOLLIDER_DOCUMENTATION}}\\n"
+        instructions = f"{COMPILER_INSTRUCTIONS}\\n\\n## Output Directory\\n\\nOutput files to be saved in: {settings.DEFAULT_OUT_DIR}\\n"
 
         super().__init__(
             name=agent_name,
@@ -115,8 +110,3 @@ class CompilerAgent(Agent):
             ),
             **kwargs,
         )
-
-
-# Note: The old `if __name__ == "__main__":` block has been removed.
-# The iterative logic is now part of the agent's instructions and SDK execution.
-# Step 10 will focus on refining these instructions for the iterative loop.
