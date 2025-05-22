@@ -125,18 +125,16 @@ def run_supercollider_code(
             f"Could not create parent directory {actual_wav_path.parent}: {e}"
         ) from e
 
-    scsynth_proc = None
-    sclang_proc = None
+    sclang_proc = None  # scsynth_proc is removed as scsynth is now externally managed
 
     safe_duration = duration if duration > 0 else 15.0
-    # Increased buffer for OSC model: setup time, OSC comms, file writing buffer
     operation_buffer_seconds = getattr(settings, "SCLANG_TIMEOUT_BUFFER_SECONDS", 30.0)
     overall_timeout_seconds = safe_duration + operation_buffer_seconds
     operation_start_time = time.monotonic()
 
-    error_keywords_lower = [
+    error_keywords_lower = [  # Keep for sclang error checking
         "error:",
-        "failure in server",
+        "failure in server",  # This might still appear if sclang can't connect to your external scsynth
         "doesnotunderstanderror",
         "exception:",
         "failed.",
@@ -144,147 +142,20 @@ def run_supercollider_code(
         "parse failed",
         "segmentation fault",
         "illegal instruction",
-        "address already in use",  # For server boot issues
-        "server failed to start",  # Explicit scsynth failure
     ]
-    scsynth_ready_signals = [
-        "SuperCollider 3 server ready",
-        "UDP server listening",
-        "TCP server listening",  # If TCP is ever enabled by default or options
-        "server ready",  # A more generic one
-    ]
+    # scsynth_ready_signals are removed as scsynth boot is not monitored by this script anymore
 
     try:
-        # 1. Start scsynth (SuperCollider Server)
-        logger.info(f"Starting scsynth (UDP port: {scsynth_udp_port})...")
-        scsynth_cmd = [scsynth_executable_path, "-u", str(scsynth_udp_port)]
-        try:
-            scsynth_proc = subprocess.Popen(
-                scsynth_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,  # Use text mode for easier parsing
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,  # Line buffered
-            )
-        except FileNotFoundError:
-            raise CodeExecutionError(
-                f"scsynth executable not found at '{scsynth_executable_path}'. Is it in PATH?"
-            )
-
-        logger.info("Monitoring scsynth startup...")
-        scsynth_boot_timeout_seconds = getattr(
-            settings, "SCSYNTH_BOOT_TIMEOUT_SECONDS", 10.0
+        # scsynth is assumed to be running externally.
+        # Python will now only manage the sclang process.
+        logger.info(
+            f"Assuming scsynth is running externally and listening on UDP port: {scsynth_udp_port}"
         )
-        scsynth_boot_deadline = time.monotonic() + scsynth_boot_timeout_seconds
-        scsynth_ready = False
-        scsynth_startup_stdout = []
-        scsynth_startup_stderr = []
-        sclang_stdout_acc = []
+        sclang_stdout_acc = []  # Initialize here as scsynth monitoring block is removed
         sclang_stderr_acc = []
         sclang_setup_error_message = None
 
-        os.set_blocking(scsynth_proc.stdout.fileno(), False)
-        os.set_blocking(scsynth_proc.stderr.fileno(), False)
-
-        while time.monotonic() < scsynth_boot_deadline:
-            if scsynth_proc.poll() is not None:
-                # scsynth exited prematurely, collect output and break
-                break
-
-            ready_to_read, _, _ = select.select(
-                [scsynth_proc.stdout, scsynth_proc.stderr], [], [], 0.1
-            )
-            for stream in ready_to_read:
-                is_stdout = stream == scsynth_proc.stdout
-                try:
-                    for line in iter(stream.readline, ""):
-                        if not line:
-                            break
-                        line_str = line.strip()
-                        if not line_str:
-                            continue
-
-                        if is_stdout:
-                            scsynth_startup_stdout.append(line_str)
-                            logger.debug(f"scsynth STDOUT (boot): {line_str}")
-                            for ready_signal in scsynth_ready_signals:
-                                if ready_signal in line_str:
-                                    scsynth_ready = True
-                                    logger.info(
-                                        f"scsynth ready signal detected: '{line_str}'"
-                                    )
-                                    break
-                        else:  # stderr
-                            scsynth_startup_stderr.append(line_str)
-                            logger.warning(f"scsynth STDERR (boot): {line_str}")
-                            # Check for critical errors in stderr as well
-                            for err_kw in error_keywords_lower:
-                                if err_kw in line_str.lower():
-                                    # This is a critical error, scsynth likely won't become ready
-                                    logger.error(
-                                        f"Critical error keyword '{err_kw}' in scsynth stderr during boot: {line_str}"
-                                    )
-                                    # We could choose to break early here if error is fatal
-                                    break
-                        if scsynth_ready:
-                            break
-                    if scsynth_ready:
-                        break
-                except BlockingIOError:
-                    pass
-                except Exception as e_read_scsynth:
-                    logger.warning(
-                        f"Exception reading from scsynth during boot: {e_read_scsynth}"
-                    )
-                    # Potentially break or handle as a failure
-                    break
-            if scsynth_ready or scsynth_proc.poll() is not None:
-                break
-
-        # After loop, check status
-        final_scsynth_stdout = "\\n".join(scsynth_startup_stdout)
-        final_scsynth_stderr = "\\n".join(scsynth_startup_stderr)
-
-        if not scsynth_ready and scsynth_proc.poll() is None:  # Timed out
-            scsynth_proc.terminate()
-            try:
-                s_out, s_err = scsynth_proc.communicate(timeout=2)
-                final_scsynth_stdout += ("\\n" + s_out) if s_out else ""
-                final_scsynth_stderr += ("\\n" + s_err) if s_err else ""
-            except subprocess.TimeoutExpired:
-                scsynth_proc.kill()
-                s_out, s_err = scsynth_proc.communicate(timeout=2)
-                final_scsynth_stdout += ("\\n" + s_out) if s_out else ""
-                final_scsynth_stderr += ("\\n" + s_err) if s_err else ""
-
-            raise CodeExecutionError(
-                f"scsynth timed out after {scsynth_boot_timeout_seconds}s. No ready signal detected.\\n"
-                f"scsynth STDOUT: {final_scsynth_stdout.strip()}\\nscsynth STDERR: {final_scsynth_stderr.strip()}"
-            )
-
-        if (
-            scsynth_proc.poll() is not None and not scsynth_ready
-        ):  # Exited prematurely without being ready
-            # Ensure all output is read if communicate wasn't called yet
-            if (
-                not final_scsynth_stdout and not final_scsynth_stderr
-            ):  # if buffers are empty, try communicate
-                s_out, s_err = scsynth_proc.communicate(
-                    timeout=2
-                )  # Already exited, so communicate should be fast
-                final_scsynth_stdout = s_out or ""
-                final_scsynth_stderr = s_err or ""
-
-            raise CodeExecutionError(
-                f"scsynth failed to start or exited prematurely. Exit code: {scsynth_proc.returncode}.\\n"
-                f"scsynth STDOUT: {final_scsynth_stdout.strip()}\\nscsynth STDERR: {final_scsynth_stderr.strip()}"
-            )
-
-        logger.info("scsynth started successfully and is presumed ready.")
-
-        # 2. Start sclang and send the script via stdin
+        # 1. Start sclang and send the script via stdin (was step 2)
         logger.info("Preparing to start sclang and send script via stdin.")
         logger.info(
             f"sclang should listen for OSC on {sclang_osc_host}:{sclang_osc_port}"
@@ -841,85 +712,10 @@ def run_supercollider_code(
             logger.debug(f"Final accumulated sclang STDERR:\\n{sclang_final_stderr}")
 
         # Attempt to quit scsynth via OSC first, then terminate/kill process
-        if scsynth_proc and scsynth_proc.poll() is None:
-            if PYTHONOSC_AVAILABLE:
-                logger.info(
-                    f"Attempting to quit scsynth (PID: {scsynth_proc.pid}) via OSC message to port {scsynth_udp_port}..."
-                )
-                try:
-                    # scsynth listens on its own UDP port for /quit
-                    scsynth_osc_client = udp_client.UDPClient(
-                        sclang_osc_host,
-                        scsynth_udp_port,  # Assuming scsynth is on the same host
-                    )
-                    quit_msg = osc_message_builder.OscMessageBuilder(address="/quit")
-                    scsynth_osc_client.send(quit_msg.build())
-                    logger.info(
-                        f"Sent /quit OSC to scsynth on port {scsynth_udp_port}."
-                    )
-                    # Give scsynth a moment to process the /quit message
-                    time.sleep(
-                        getattr(settings, "SCSYNTH_QUIT_GRACE_PERIOD_SECONDS", 0.5)
-                    )
-                except Exception as e_osc_quit:
-                    logger.warning(
-                        f"Failed to send /quit OSC message to scsynth: {e_osc_quit}"
-                    )
+        # scsynth process management is removed from this finally block.
+        # Python no longer controls scsynth.
 
-            if scsynth_proc.poll() is None:  # Check if OSC quit worked
-                logger.info(f"Terminating scsynth process (PID: {scsynth_proc.pid})...")
-                scsynth_proc.terminate()
-                try:
-                    scsynth_proc.wait(
-                        timeout=settings.SCSYNTH_TERMINATE_TIMEOUT_SECONDS
-                    )
-                    logger.info(
-                        f"scsynth process (PID: {scsynth_proc.pid}) terminated."
-                    )
-                except subprocess.TimeoutExpired:
-                    logger.warning(
-                        f"scsynth process (PID: {scsynth_proc.pid}) did not terminate gracefully, killing."
-                    )
-                    scsynth_proc.kill()
-                    try:
-                        scsynth_proc.wait(timeout=settings.SCSYNTH_KILL_TIMEOUT_SECONDS)
-                        logger.info(
-                            f"scsynth process (PID: {scsynth_proc.pid}) killed."
-                        )
-                    except subprocess.TimeoutExpired:
-                        logger.error(
-                            f"scsynth process (PID: {scsynth_proc.pid}) failed to die even after kill."
-                        )
-        elif scsynth_proc:
-            logger.info(
-                f"scsynth process (PID: {scsynth_proc.pid}) already terminated with code: {scsynth_proc.returncode}."
-            )
-
-        # Capture any final output from scsynth
-        scsynth_final_stdout_str = ""
-        scsynth_final_stderr_str = ""
-        if scsynth_proc:
-            if scsynth_proc.stdout and not scsynth_proc.stdout.closed:
-                try:
-                    scsynth_final_stdout_str = scsynth_proc.stdout.read() or ""
-                except Exception as e_read_scsynth_stdout_final:
-                    logger.warning(
-                        f"Error reading final scsynth stdout: {e_read_scsynth_stdout_final}"
-                    )
-            if scsynth_proc.stderr and not scsynth_proc.stderr.closed:
-                try:
-                    scsynth_final_stderr_str = scsynth_proc.stderr.read() or ""
-                except Exception as e_read_scsynth_stderr_final:
-                    logger.warning(
-                        f"Error reading final scsynth stderr: {e_read_scsynth_stderr_final}"
-                    )
-
-        if scsynth_final_stdout_str:
-            logger.debug(f"Final scsynth STDOUT:\\n{scsynth_final_stdout_str}")
-        if scsynth_final_stderr_str:
-            logger.debug(f"Final scsynth STDERR:\\n{scsynth_final_stderr_str}")
-
-    # Final check for output file, using the potentially updated sclang_final_stdout/stderr
+    # Final check for output file
     if not actual_wav_path.exists() or not actual_wav_path.is_file():
         final_stdout_for_error = (
             sclang_final_stdout

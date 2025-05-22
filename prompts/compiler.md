@@ -269,6 +269,7 @@ SynthDef(gEffectName ++ "_SynthDef", { |outBus = 0, gate = 1, masterAmp = 0.1, f
 Routine {
     var targetSampleRate = 48000;
 
+    server.options.sampleRate = targetSampleRate;
     server.recChannels = 1;
     server.recHeaderFormat = "WAV";
     server.recSampleFormat = "float";
@@ -371,6 +372,7 @@ var gEffectName = "MySound";
             Routine {
                 var targetSampleRate = 48000;
 
+                server.options.sampleRate = targetSampleRate;
                 server.recChannels = 1;
                 server.recHeaderFormat = "WAV";
                 server.recSampleFormat = "float";
