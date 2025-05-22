@@ -1,5 +1,5 @@
 // These will be replaced by Python injection if used with run_supercollider_code
-var gAbsoluteOutputWavPath = "/tmp/_sctemp/MySound_attempt_1.wav";
+var gAbsoluteOutputWavPath = "/Users/scragz/Projects/phonosyne/output/osc_tests/test_osc_output.wav";
 var gRecipeDuration = 3.0; // Total duration for recording & envelope
 var gEffectName = "MySound";
 

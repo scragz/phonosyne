@@ -95,6 +95,30 @@ LOG_FILE: Path | None = (
 # UI/UX
 USE_ANSI_COLORS: bool = os.getenv("NO_COLOR") is None and os.getenv("TERM") != "dumb"
 
-SCLANG_TIMEOUT_BUFFER_SECONDS: float = 5.0
-SCLANG_STOP_PROCESSING_TIME_SECONDS: float = 5.0
-SCLANG_SETUP_TIMEOUT_SECONDS: float = 5.0
+SCLANG_TIMEOUT_BUFFER_SECONDS: float = 5.0  # General buffer for sclang operations
+SCLANG_STOP_PROCESSING_TIME_SECONDS: float = (
+    5.0  # Time for sclang to process /stop OSC and finalize
+)
+SCLANG_SETUP_TIMEOUT_SECONDS: float = (
+    10.0  # Increased timeout for sclang initial script setup
+)
+SCLANG_TERMINATE_TIMEOUT_SECONDS: float = (
+    5.0  # Timeout for sclang process to terminate gracefully
+)
+SCLANG_KILL_TIMEOUT_SECONDS: float = (
+    2.0  # Timeout for sclang process to die after being killed
+)
+
+# SuperCollider Server (scsynth) specific timeouts
+SCSYNTH_BOOT_TIMEOUT_SECONDS: float = (
+    10.0  # Timeout for scsynth to boot and become ready
+)
+SCSYNTH_TERMINATE_TIMEOUT_SECONDS: float = (
+    5.0  # Timeout for scsynth process to terminate gracefully
+)
+SCSYNTH_KILL_TIMEOUT_SECONDS: float = (
+    2.0  # Timeout for scsynth process to die after being killed
+)
+SCSYNTH_QUIT_GRACE_PERIOD_SECONDS: float = (
+    3.0  # Increased time for scsynth to process OSC /quit before termination
+)

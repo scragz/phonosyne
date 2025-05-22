@@ -181,6 +181,9 @@ def run_supercollider_code(
         scsynth_ready = False
         scsynth_startup_stdout = []
         scsynth_startup_stderr = []
+        sclang_stdout_acc = []
+        sclang_stderr_acc = []
+        sclang_setup_error_message = None
 
         os.set_blocking(scsynth_proc.stdout.fileno(), False)
         os.set_blocking(scsynth_proc.stderr.fileno(), False)
@@ -344,8 +347,73 @@ def run_supercollider_code(
 
                 # Part 2: Send the user's actual script (variable 'code'), wrapped in .interpret
                 logger.debug("Preparing user's SC script for '.interpret' execution...")
+
+                # Replace placeholders if they exist in the input 'code' string
+                # This is particularly for test scripts like test.sc that use these placeholders.
+                # LLM-generated code should ideally embed these values directly.
+                code_to_process = code
+
+                # More verbose logging for debugging placeholder replacement
+                path_placeholder = "PYTHON_OUTPUT_PATH_PLACEHOLDER"
+                duration_placeholder = "PYTHON_RECIPE_DURATION_PLACEHOLDER"
+                effect_name_placeholder = "PYTHON_EFFECT_NAME_PLACEHOLDER"
+
+                logger.debug(
+                    f"Checking for placeholders in code_to_process (first 500 chars): {code_to_process[:500]}"
+                )
+
+                path_found = path_placeholder in code_to_process
+                duration_found = duration_placeholder in code_to_process
+                effect_name_found = effect_name_placeholder in code_to_process
+                logger.debug(f"Placeholder '{path_placeholder}' found: {path_found}")
+                logger.debug(
+                    f"Placeholder '{duration_placeholder}' found: {duration_found}"
+                )
+                logger.debug(
+                    f"Placeholder '{effect_name_placeholder}' found: {effect_name_found}"
+                )
+
+                if path_found:
+                    sc_compatible_path = (
+                        actual_wav_path.as_posix()
+                    )  # SC uses forward slashes
+                    code_to_process = code_to_process.replace(
+                        path_placeholder, sc_compatible_path
+                    )
+                    logger.info(  # Changed to INFO for better visibility during testing
+                        f"Replaced '{path_placeholder}' with: {sc_compatible_path}"
+                    )
+
+                if duration_found:
+                    code_to_process = code_to_process.replace(
+                        duration_placeholder, str(safe_duration)
+                    )
+                    logger.info(  # Changed to INFO
+                        f"Replaced '{duration_placeholder}' with: {safe_duration}"
+                    )
+
+                if effect_name_found:
+                    actual_effect_name = effect_name if effect_name else "UnnamedEffect"
+                    code_to_process = code_to_process.replace(
+                        effect_name_placeholder, actual_effect_name
+                    )
+                    logger.info(  # Changed to INFO
+                        f"Replaced '{effect_name_placeholder}' with: {actual_effect_name}"
+                    )
+
+                # Log a preview of the script that will be escaped and interpreted
+                processed_script_preview_lines = code_to_process.splitlines()[
+                    :5
+                ]  # Show first 5 lines
+                processed_script_preview = "\\n".join(processed_script_preview_lines)
+                logger.debug(
+                    f"Preview of SC script to be interpreted (after potential placeholder replacement, up to 5 lines):\\n{processed_script_preview.strip()}"
+                )
+
                 escaped_user_code = (
-                    code.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+                    code_to_process.replace("\\", "\\\\")
+                    .replace('"', '\\"')
+                    .replace("\n", "\\n")
                 )
                 user_script_to_interpret = f'"{escaped_user_code}".interpret;\n\u000c\n'
 
@@ -401,10 +469,6 @@ def run_supercollider_code(
 
         os.set_blocking(sclang_proc.stdout.fileno(), False)
         os.set_blocking(sclang_proc.stderr.fileno(), False)
-
-        sclang_stdout_acc = []  # Store lines of stdout
-        sclang_stderr_acc = []  # Store lines of stderr
-        sclang_setup_error_message = None
 
         sclang_setup_deadline = time.monotonic() + settings.SCLANG_SETUP_TIMEOUT_SECONDS
 
@@ -717,68 +781,124 @@ def run_supercollider_code(
     finally:
         logger.info("Cleaning up SuperCollider processes (OSC model)...")
 
-        # Terminate sclang first, as it might be controlling scsynth
+        # Terminate sclang first
         if sclang_proc and sclang_proc.poll() is None:
-            logger.info("Terminating sclang process...")
+            logger.info(f"Terminating sclang process (PID: {sclang_proc.pid})...")
             sclang_proc.terminate()
             try:
-                sclang_proc.wait(timeout=5.0)  # Wait for graceful termination
-                logger.info("sclang process terminated.")
+                sclang_proc.wait(timeout=settings.SCLANG_TERMINATE_TIMEOUT_SECONDS)
+                logger.info(f"sclang process (PID: {sclang_proc.pid}) terminated.")
             except subprocess.TimeoutExpired:
-                logger.warning("sclang process did not terminate gracefully, killing.")
+                logger.warning(
+                    f"sclang process (PID: {sclang_proc.pid}) did not terminate gracefully, killing."
+                )
                 sclang_proc.kill()
                 try:
-                    sclang_proc.wait(timeout=2.0)
+                    sclang_proc.wait(timeout=settings.SCLANG_KILL_TIMEOUT_SECONDS)
+                    logger.info(f"sclang process (PID: {sclang_proc.pid}) killed.")
                 except subprocess.TimeoutExpired:
-                    logger.error("sclang process failed to die even after kill.")
-            # Capture any final output
-            if sclang_proc.stdout and not sclang_proc.stdout.closed:
-                try:
-                    remaining_stdout = sclang_proc.stdout.read()
-                    if remaining_stdout:  # Ensure it's not None or empty
-                        sclang_stdout_acc.append(remaining_stdout)
-                except Exception as e_read_stdout_final:
-                    logger.warning(
-                        f"Error reading final sclang stdout: {e_read_stdout_final}"
+                    logger.error(
+                        f"sclang process (PID: {sclang_proc.pid}) failed to die even after kill."
                     )
+        elif sclang_proc:
+            logger.info(
+                f"sclang process (PID: {sclang_proc.pid}) already terminated with code: {sclang_proc.returncode}."
+            )
 
-            if sclang_proc.stderr and not sclang_proc.stderr.closed:
-                try:
-                    remaining_stderr = sclang_proc.stderr.read()
-                    if remaining_stderr:  # Ensure it's not None or empty
-                        sclang_stderr_acc.append(remaining_stderr)
-                except Exception as e_read_stderr_final:
-                    logger.warning(
-                        f"Error reading final sclang stderr: {e_read_stderr_final}"
-                    )
+        # Capture any final output from sclang
+        if sclang_proc:
+            for stream_obj, acc_list, stream_name in [
+                (sclang_proc.stdout, sclang_stdout_acc, "stdout"),
+                (sclang_proc.stderr, sclang_stderr_acc, "stderr"),
+            ]:
+                if stream_obj and not stream_obj.closed:
+                    try:
+                        content = stream_obj.read()
+                        if content:  # content is a string
+                            acc_list.append(content)  # Appending string
+                    except Exception as e_read_final:
+                        try:
+                            # Attempt to log the error message as a string
+                            logger.warning(
+                                f"Error reading final sclang {stream_name}: {str(e_read_final)}"
+                            )
+                        except Exception as log_e:
+                            # Fallback if even string conversion of error fails
+                            logger.warning(
+                                f"Error reading final sclang {stream_name}, and also failed to log original exception: {log_e}"
+                            )
 
-            sclang_final_stdout = "\\n".join(filter(None, sclang_stdout_acc)).strip()
-            sclang_final_stderr = "\\n".join(filter(None, sclang_stderr_acc)).strip()
-            if sclang_final_stdout:
-                logger.debug(
-                    f"Final accumulated sclang STDOUT:\\n{sclang_final_stdout}"
-                )
-            if sclang_final_stderr:
-                logger.debug(
-                    f"Final accumulated sclang STDERR:\\n{sclang_final_stderr}"
-                )
+        sclang_final_stdout = (
+            "\\n".join(sclang_stdout_acc).strip() if sclang_stdout_acc else ""
+        )
+        sclang_final_stderr = (
+            "\\n".join(sclang_stderr_acc).strip() if sclang_stderr_acc else ""
+        )
 
+        if sclang_final_stdout:
+            logger.debug(f"Final accumulated sclang STDOUT:\\n{sclang_final_stdout}")
+        if sclang_final_stderr:
+            logger.debug(f"Final accumulated sclang STDERR:\\n{sclang_final_stderr}")
+
+        # Attempt to quit scsynth via OSC first, then terminate/kill process
         if scsynth_proc and scsynth_proc.poll() is None:
-            logger.info("Terminating scsynth process...")
-            scsynth_proc.terminate()
-            try:
-                scsynth_proc.wait(timeout=5.0)
-                logger.info("scsynth process terminated.")
-            except subprocess.TimeoutExpired:
-                logger.warning("scsynth process did not terminate gracefully, killing.")
-                scsynth_proc.kill()
+            if PYTHONOSC_AVAILABLE:
+                logger.info(
+                    f"Attempting to quit scsynth (PID: {scsynth_proc.pid}) via OSC message to port {scsynth_udp_port}..."
+                )
                 try:
-                    scsynth_proc.wait(timeout=2.0)
+                    # scsynth listens on its own UDP port for /quit
+                    scsynth_osc_client = udp_client.UDPClient(
+                        sclang_osc_host,
+                        scsynth_udp_port,  # Assuming scsynth is on the same host
+                    )
+                    quit_msg = osc_message_builder.OscMessageBuilder(address="/quit")
+                    scsynth_osc_client.send(quit_msg.build())
+                    logger.info(
+                        f"Sent /quit OSC to scsynth on port {scsynth_udp_port}."
+                    )
+                    # Give scsynth a moment to process the /quit message
+                    time.sleep(
+                        getattr(settings, "SCSYNTH_QUIT_GRACE_PERIOD_SECONDS", 0.5)
+                    )
+                except Exception as e_osc_quit:
+                    logger.warning(
+                        f"Failed to send /quit OSC message to scsynth: {e_osc_quit}"
+                    )
+
+            if scsynth_proc.poll() is None:  # Check if OSC quit worked
+                logger.info(f"Terminating scsynth process (PID: {scsynth_proc.pid})...")
+                scsynth_proc.terminate()
+                try:
+                    scsynth_proc.wait(
+                        timeout=settings.SCSYNTH_TERMINATE_TIMEOUT_SECONDS
+                    )
+                    logger.info(
+                        f"scsynth process (PID: {scsynth_proc.pid}) terminated."
+                    )
                 except subprocess.TimeoutExpired:
-                    logger.error("scsynth process failed to die even after kill.")
-            # Capture any final output from scsynth
-            scsynth_final_stdout_str = ""
-            scsynth_final_stderr_str = ""
+                    logger.warning(
+                        f"scsynth process (PID: {scsynth_proc.pid}) did not terminate gracefully, killing."
+                    )
+                    scsynth_proc.kill()
+                    try:
+                        scsynth_proc.wait(timeout=settings.SCSYNTH_KILL_TIMEOUT_SECONDS)
+                        logger.info(
+                            f"scsynth process (PID: {scsynth_proc.pid}) killed."
+                        )
+                    except subprocess.TimeoutExpired:
+                        logger.error(
+                            f"scsynth process (PID: {scsynth_proc.pid}) failed to die even after kill."
+                        )
+        elif scsynth_proc:
+            logger.info(
+                f"scsynth process (PID: {scsynth_proc.pid}) already terminated with code: {scsynth_proc.returncode}."
+            )
+
+        # Capture any final output from scsynth
+        scsynth_final_stdout_str = ""
+        scsynth_final_stderr_str = ""
+        if scsynth_proc:
             if scsynth_proc.stdout and not scsynth_proc.stdout.closed:
                 try:
                     scsynth_final_stdout_str = scsynth_proc.stdout.read() or ""
@@ -794,23 +914,24 @@ def run_supercollider_code(
                         f"Error reading final scsynth stderr: {e_read_scsynth_stderr_final}"
                     )
 
-            if scsynth_final_stdout_str:
-                logger.debug(f"Final scsynth STDOUT:\\n{scsynth_final_stdout_str}")
-            if scsynth_final_stderr_str:
-                logger.debug(f"Final scsynth STDERR:\\n{scsynth_final_stderr_str}")
+        if scsynth_final_stdout_str:
+            logger.debug(f"Final scsynth STDOUT:\\n{scsynth_final_stdout_str}")
+        if scsynth_final_stderr_str:
+            logger.debug(f"Final scsynth STDERR:\\n{scsynth_final_stderr_str}")
 
+    # Final check for output file, using the potentially updated sclang_final_stdout/stderr
     if not actual_wav_path.exists() or not actual_wav_path.is_file():
-        # Ensure final_stdout_for_error and final_stderr_for_error are defined even if sclang_proc was None
         final_stdout_for_error = (
-            "\\n".join(filter(None, sclang_stdout_acc)).strip()
-            if sclang_stdout_acc
-            else "N/A (sclang_proc likely None or no output)"
+            sclang_final_stdout
+            if sclang_final_stdout
+            else "N/A (sclang STDOUT capture failed or empty)"
         )
         final_stderr_for_error = (
-            "\\n".join(filter(None, sclang_stderr_acc)).strip()
-            if sclang_stderr_acc
-            else "N/A (sclang_proc likely None or no output)"
+            sclang_final_stderr
+            if sclang_final_stderr
+            else "N/A (sclang STDERR capture failed or empty)"
         )
+
         raise CodeExecutionError(
             f"Output .wav file not found at {actual_wav_path} after OSC-controlled execution.\\n"
             f"Final sclang STDOUT:\\n{final_stdout_for_error}\\n"
