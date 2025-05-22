@@ -30,16 +30,15 @@ Your entire output **MUST** be a single line of valid JSON. Do not wrap it in ma
 ## Field rules
 
 - **`effect_name`**
-  `snake_case_slug` derived from `seed_description`, prefixed by `id`.
+  `snake_case_slug[:100]` derived from `seed_description`, prefixed by `id`, max 100 characters.
 - **`duration`**
   Float, **exactly** `duration_s`.
-- **`description`** (≈ 40–120 words)
-
-  - **Multiple layers**: oscillator/noise/F-synth types.
+- **`description`** (≈ 200-800 words)
+  - Multiple layers: oscillator/noise/F-synth types.
   - Filters: type, cutoff/res-Q, sweeps.
   - Effects (pick from list below) with key params; creative routing encouraged.
   - Modulation: LFOs, envelopes, random, side-chains.
-  - Mixing levels or percentages; mention stereo notions if relevant before mono sum.
+  - Mixing levels or percentages.
   - Be **descriptive** but concise, aiming for at least 200 words.
   - **No** JSON, code, or markup inside this string.
 
@@ -163,5 +162,91 @@ These guidelines direct the generation of melodic and harmonic content towards a
 **Guideline for Output Selection (Internal Prioritization):**
 
 - If the generation process yields multiple melodic or harmonic options, internally prioritize and select or favor options that most effectively embody these principles of advanced pitch/scale usage, melodic/rhythmic complexity, expressive dynamics, harmonic adventurousness, and the overall Zappa/Dolphy-esque artistic spirit.
+
+⸻
+
+## Appendix: Guidelines for Advanced Timbre & Textural Generation
+
+_(for slow-evolving, highly sculpted sounds in SuperCollider)_
+
+1. **Design Spectra as Living Ecosystems**
+
+   - **Slow, Layered Evolution:** Treat a timbre’s spectrum like a weather system—minute-to-minute drift is as important as the grand arc. Use long-period LFOs, spline envelopes, or chaotic patterns (e.g., `LFNoise0.kr`, `MouseX.kr` for gestural mapping) to reshape partial balance, filter cutoff, or waveshaper indices over tens of seconds or minutes.
+   - **Spectral Contrast & “Breathing”:** Alternate between broad-band/noisy and narrow-band/tonal states. Sub-audio modulate filter Q or bandwidth so partials “bloom” and “wither,” avoiding static pads.
+
+2. **Construct a Multi-Layer Timbral Architecture**
+
+   - **Discrete Partial Families:** Compose each sound from semi-independent strata (e.g., bass partial bed, midrange inharmonics, airy noise veil). Crossfade layers with `XFade2.ar` or by dynamically biasing their amp envelopes, rather than global volume changes.
+   - **Inter-Layer Dialogue:** Drive one layer’s parameters with another’s analysis (e.g., use `Amplitude.kr` from a noisy layer to modulate the brightness of a tonal layer) to create causal, “alive” interactions.
+
+3. **Micro-Fluctuation & Humanization**
+
+   - **Microscopic Jitter:** Inject low-depth randomness (< 1 dB, < 3 cents, < 5 ms) into amp, pitch, and delay lines (`Rand`, `TRand`) so even static drones retain a hand-played aura.
+   - **Gesture-Scale Irregularity:** Occasionally break slow curves with brief disturbances (granular bursts, sudden resonator hits) that resolve back into stasis, mirroring human breath or bow pressure changes.
+
+4. **Textural Polymorphism & Morphology**
+
+   - **Harmonically Unstable Carriers:** Favor algorithms that mutate their own topology—e.g., `Warp1.ar` grains scanned through a buffer that is simultaneously being overdubbed, or `Gendy*` classes for self-modulating waveforms.
+   - **Dynamic Waveshaping Pipelines:** Chain nonlinearities (`Shaper`, `Fold`, `SoftClip`) whose transfer curves are themselves modulated, so the same input evolves from glassy to gritty to hollow.
+
+5. **Psychoacoustic Depth & Spatial Motion**
+
+   - **Macro-Panning Paths:** Map long-span envelopes to 3-D panners (`PanAz`, ambisonics) so the listener perceives timbre as a moving object, not a static wall.
+   - **Spectral-Space Coupling:** Let brightness control perceived distance—darker layers drift backward via added late-reverb, bright layers step forward with early reflections and subtle chorus.
+
+6. **SuperCollider-Centric Implementation Patterns**
+
+   - **Modular SynthDef + Pattern Workflow:**
+
+     - _SynthDef:_ Encapsulate the full timbral graph, exposing only a few macro controls (e.g., `evoRate`, `density`, `darkBright`) for clarity.
+     - _Pattern Layer:_ Use `Pseg`, `Pfunc`, or custom `Stream` functions to script long-horizon parameter curves, making large-scale form composable.
+
+   - **Declarative Preset Morphing:** Store contrasting parameter snapshots in an array; interpolate with `Env` or `LinXFade2.kr` so one call can glide across timbral states without “tearing.”
+
+7. **Guideline for Variation & Non-Repetition**
+
+   - **Avoid Loop Fatigue:** Never let any parameter linger at an identical value for more than \~5 s unless silence is the point. Even drones should show micro-life.
+   - **Context-Aware Contrast:** When generating multiple evolving pads, internally prioritize outputs that differ in spectral centroid _and_ modulation topology (e.g., one granular-additive, one FM-resonator) to maximize palette diversity.
+
+8. **Output-Selection Heuristics (Internal Prioritization)**
+
+   - Favor renders whose **spectral trajectory** tells a perceptible story—clear start, exploratory middle, and resolution or fade.
+   - Prefer sounds with **balanced complexity**: rich enough for interest, sparse enough for subsequent layering or processing.
+   - Discard candidates where modulation feels mechanically periodic unless that clockwork aesthetic is explicitly requested.
+
+### Addendum – Macro-versus-Micro Timbre Evolution
+
+A. Macro (Overall) Evolution — “The Long Arc”
+
+- **Narrative contour:** Every sound should read like a three-act play: a distinct entry, a period of transformation, and a resolution or disappearance.
+- **Time-scales:** Reserve _slow_ modulators (≈ 30 – 240 s) for the big movements of brightness, density, spatial depth, or harmonicity.
+
+  - _SuperCollider sketch:_ drive a single `Line.kr` or spline `Env` into a global control bus (`~macroCtl`) that all layers can reference; sprinkle gentle irregularity with `LFDNoise1.kr(0.01)` so long arcs never feel perfectly linear.
+
+B. Micro (Repeating) Variations — “Grain-Level Life”
+
+- **Constant jitter:** Inside that long arc, each quarter- to two-second window must breathe—tiny shifts in partial amplitudes, FM indices, glitch grains, etc.—so the pad never “freezes.”
+
+  - Use `Demand.kr` random streams (`Drand`, `Diwhite`) clocked by `Impulse.kr(4)` to reseed microscale parameters.
+  - Add occasional `TGrains.ar` bursts whose buffer position meanders via `LFNoise2.kr(1)`.
+
+C. Dynamic Layer Weaving — Fading In & Out
+
+- **Treat layers like ensemble players:** Let individual strata _enter_ and _exit_ over overlapping spans so the composite timbre inhales and exhales.
+
+  - Give every layer its own amp envelope (`Env([0,1,1,0], [fadeIn, sustain, fadeOut])`).
+  - Centralize crossfades: route layer outputs through `XFade2.ar`, controlling the morph with a shared `~fadeBus`, so a single gesture can make one layer bloom while another withers.
+  - Automate births/deaths with a state-machine `Pdef` that schedules fades every _N_ bars for hands-off evolution.
+
+D. Synchronising the Two Scales
+
+- **Hierarchical coupling:** The macro controller should modulate the _range_ (or bias) of the micro controllers.
+
+  - Example: as global brightness rises, widen the random window for micro pitch flutter; as it falls, narrow high-frequency noise bandwidth.
+  - Multiply micro-random streams by `~macroCtl.linlin(0,1, minDepth, maxDepth)` or trigger discrete micro-variation presets at macro cue points.
+
+E. Updated Selection Heuristic
+
+- **Dual-scale audit:** Reject any render that excels in only one dimension. Preferred outputs demonstrate a compelling macro trajectory _and_ audible micro-level vitality throughout.
 
 ---

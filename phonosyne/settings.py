@@ -94,3 +94,7 @@ LOG_FILE: Path | None = (
 
 # UI/UX
 USE_ANSI_COLORS: bool = os.getenv("NO_COLOR") is None and os.getenv("TERM") != "dumb"
+
+SCLANG_TIMEOUT_BUFFER_SECONDS: float = 5.0
+SCLANG_STOP_PROCESSING_TIME_SECONDS: float = 5.0
+SCLANG_SETUP_TIMEOUT_SECONDS: float = 5.0

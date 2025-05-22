@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 @function_tool
-async def run_supercollider_code_tool(
+async def run_supercollider_code(
     code: str,
     output_filename: str,  # This is absolute path as per updated prompt
     effect_name: str,
-    recipe_duration: float,
+    duration: float,
 ) -> str:
     """
     Executes a SuperCollider script and saves the output .wav file.
@@ -32,13 +32,13 @@ async def run_supercollider_code_tool(
         output_filename: Absolute path for the output .wav file. The SC script
                          must write to this exact path.
         effect_name: The name of the effect, for context.
-        recipe_duration: The target duration of the sound in seconds.
+        duration: The target duration of the sound in seconds.
 
     Returns:
         Absolute path to the .wav file on success, or an error message string.
     """
     logger.info(
-        f"run_supercollider_code_tool: output_filename='{output_filename}', effect_name='{effect_name}', duration='{recipe_duration}'"
+        f"run_supercollider_code: output_filename='{output_filename}', effect_name='{effect_name}', duration='{duration}'"
     )
     code_to_log = code[:500] + "..." if len(code) > 500 else code
     logger.debug(f"Code (first 500 chars):\n{code_to_log}")
@@ -50,13 +50,11 @@ async def run_supercollider_code_tool(
         wav_path_obj = existing_run_supercollider_code(
             code=code,
             output_filename=output_filename,  # This is the absolute path
-            recipe_duration=recipe_duration,
+            duration=duration,
             effect_name=effect_name,
             # sclang_path will use its default from existing_run_supercollider_code
         )
-        logger.info(
-            f"run_supercollider_code_tool successfully produced: {wav_path_obj}"
-        )
+        logger.info(f"run_supercollider_code successfully produced: {wav_path_obj}")
         return str(wav_path_obj)
     except CodeExecutionError as e:  # Make sure CodeExecutionError is imported
         err_msg = f"CodeExecutionError from existing_run_supercollider_code: {str(e)}"
@@ -69,6 +67,6 @@ async def run_supercollider_code_tool(
         logger.error(err_msg, exc_info=True)
         return err_msg
     except Exception as e:
-        err_msg = f"Unexpected error in run_supercollider_code_tool: {str(e)}"
+        err_msg = f"Unexpected error in run_supercollider_code: {str(e)}"
         logger.error(err_msg, exc_info=True)
         return err_msg

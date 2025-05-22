@@ -36,7 +36,9 @@ from phonosyne.agents.schemas import (  # Add other schemas as they become neces
 )
 
 # Import specific utilities needed for the tools
-from phonosyne.utils.exec_env import CodeExecutionError
+from phonosyne.utils.exec_env import (
+    CodeExecutionError,
+)
 from phonosyne.utils.exec_env import (
     run_supercollider_code as existing_run_supercollider_code,
 )
@@ -53,7 +55,7 @@ async def run_supercollider_code(
     code: str,
     output_filename: str,  # This is absolute path as per updated prompt
     effect_name: str,
-    recipe_duration: float,
+    duration: float,
 ) -> str:
     """
     Executes a SuperCollider script and saves the output .wav file.
@@ -65,13 +67,13 @@ async def run_supercollider_code(
         output_filename: Absolute path for the output .wav file. The SC script
                          must write to this exact path.
         effect_name: The name of the effect, for context.
-        recipe_duration: The target duration of the sound in seconds.
+        duration: The target duration of the sound in seconds.
 
     Returns:
         Absolute path to the .wav file on success, or an error message string.
     """
     logger.info(
-        f"run_supercollider_code_tool: output_filename='{output_filename}', effect_name='{effect_name}', duration='{recipe_duration}'"
+        f"run_supercollider_code: output_filename='{output_filename}', effect_name='{effect_name}', duration='{duration}'"
     )
     code_to_log = code[:500] + "..." if len(code) > 500 else code
     logger.debug(f"Code (first 500 chars):\n{code_to_log}")
@@ -83,13 +85,11 @@ async def run_supercollider_code(
         wav_path_obj = existing_run_supercollider_code(
             code=code,
             output_filename=output_filename,  # This is the absolute path
-            recipe_duration=recipe_duration,
+            duration=duration,
             effect_name=effect_name,
             # sclang_path will use its default from existing_run_supercollider_code
         )
-        logger.info(
-            f"run_supercollider_code_tool successfully produced: {wav_path_obj}"
-        )
+        logger.info(f"run_supercollider_code successfully produced: {wav_path_obj}")
         return str(wav_path_obj)
     except CodeExecutionError as e:  # Make sure CodeExecutionError is imported
         err_msg = f"CodeExecutionError from existing_run_supercollider_code: {str(e)}"
@@ -102,7 +102,7 @@ async def run_supercollider_code(
         logger.error(err_msg, exc_info=True)
         return err_msg
     except Exception as e:
-        err_msg = f"Unexpected error in run_supercollider_code_tool: {str(e)}"
+        err_msg = f"Unexpected error in run_supercollider_code: {str(e)}"
         logger.error(err_msg, exc_info=True)
         return err_msg
 
@@ -115,14 +115,14 @@ from phonosyne.dsp.validators import validate_wav as existing_validate_wav
 
 
 @function_tool
-async def validate_audio_file(file_path: str, recipe_json: str) -> str:
+async def validate_audio_file(file_path: str, effect_name: str, duration: float) -> str:
     """
     Validates a generated .wav file against technical specifications.
 
     Args:
         file_path: Path to the temporary .wav file to validate.
-        recipe_json: A JSON string of the AnalyzerOutput schema containing target specifications
-                   (like duration, effect_name). Sample rate is currently assumed from settings.
+        effect_name: The name of the effect, for context.
+        duration: The target duration of the sound in seconds.
 
     Returns:
         "Validation successful" if all checks pass, otherwise a string detailing validation errors.
@@ -135,12 +135,10 @@ async def validate_audio_file(file_path: str, recipe_json: str) -> str:
         if not abs_file_path.exists():
             return f"Validation error: Audio file does not exist at {abs_file_path} (from {file_path})"
 
-        spec_dict = json.loads(recipe_json)
-        # AnalyzerOutput is already imported at the top of the file
-        analyzer_spec = AnalyzerOutput(**spec_dict)
-
         # existing_validate_wav is synchronous. Assuming openai-agents SDK handles this.
-        existing_validate_wav(file_path=abs_file_path, spec=analyzer_spec)
+        existing_validate_wav(
+            file_path=abs_file_path, effect_name=effect_name, duration=duration
+        )
         print(f"Audio file at {abs_file_path} successfully validated")
         return "Validation successful"
     except ValidationFailedError as e:

@@ -47,14 +47,14 @@ class ValidationFailedError(Exception):
     pass
 
 
-def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
+def validate_wav(file_path: Path, effect_name: str, duration: float) -> bool:
     """
     Validates a .wav file against specified criteria.
 
     Args:
         file_path: Path to the .wav file.
-        spec: An AnalyzerOutput object containing the target specifications
-              (primarily duration and sample rate from the recipe).
+        effect_name: The name of the effect to validate.
+        duration: The target duration of the sound in seconds.
 
     Returns:
         True if validation passes.
@@ -80,7 +80,7 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
     # 1. Check Sample Rate
     # The spec for validate_wav says "SR, duration +-0.5s, bit-depth, peak checks"
     # The AnalyzerOutput schema has `sample_rate` which defaults to settings.DEFAULT_SR
-    # So, `spec.sample_rate` should be the target.
+    # So, `sample_rate` should be the target.
     expected_sr = settings.DEFAULT_SR
     if info.samplerate != expected_sr:
         errors.append(
@@ -88,8 +88,8 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
         )
 
     # 2. Check Duration
-    # spec.duration is the target duration from AnalyzerOutput
-    expected_duration = spec.duration
+    # duration is the target duration from AnalyzerOutput
+    expected_duration = duration
     duration_tolerance = settings.DURATION_TOLERANCE_S
     lower_bound = expected_duration - duration_tolerance
     upper_bound = expected_duration + duration_tolerance
@@ -259,116 +259,6 @@ def validate_wav(file_path: Path, spec: AnalyzerOutput) -> bool:
         raise ValidationFailedError(full_error_message)
 
     logger.info(
-        f"WAV file {file_path} passed all validation checks against spec for '{spec.effect_name}'."
+        f"WAV file {file_path} passed all validation checks against spec for '{effect_name}'."
     )
     return True
-
-
-if __name__ == "__main__":
-    import shutil  # Import shutil here
-    import tempfile  # Import tempfile here
-
-    logging.basicConfig(level=logging.DEBUG)
-    logger.info("Testing WAV validator...")
-
-    # Create a dummy spec for testing
-    dummy_spec = AnalyzerOutput(
-        effect_name="test_sound",
-        duration=1.0,
-        sample_rate=settings.DEFAULT_SR,  # Use from settings
-        description="A test sound for validation.",
-    )
-
-    # Create a temporary directory for test WAV files
-    temp_dir = Path(tempfile.mkdtemp(prefix="phonosyne_validator_test_"))
-
-    # Test case 1: Valid WAV file
-    valid_wav_path = temp_dir / "valid.wav"
-    sr = dummy_spec.sample_rate
-    duration = dummy_spec.duration
-    t = np.linspace(0, duration, int(sr * duration), endpoint=False)
-    # Generate audio slightly below target peak
-    amplitude_valid = 10 ** ((settings.TARGET_PEAK_DBFS - 0.1) / 20)
-    audio_valid = amplitude_valid * np.sin(2 * np.pi * 440 * t).astype(np.float32)
-    sf.write(valid_wav_path, audio_valid, sr, subtype="FLOAT")
-
-    try:
-        print(f"\n--- Validating {valid_wav_path} (should pass) ---")
-        validate_wav(valid_wav_path, dummy_spec)
-        print(f"Validation PASSED for {valid_wav_path}")
-    except ValidationFailedError as e:
-        print(f"Validation FAILED for {valid_wav_path}: {e}")
-    except FileNotFoundError:
-        print(f"File not found for {valid_wav_path}")
-
-    # Test case 2: WAV with wrong sample rate
-    wrong_sr_wav_path = temp_dir / "wrong_sr.wav"
-    sf.write(wrong_sr_wav_path, audio_valid, sr // 2, subtype="FLOAT")
-    try:
-        print(f"\n--- Validating {wrong_sr_wav_path} (should fail: wrong SR) ---")
-        validate_wav(wrong_sr_wav_path, dummy_spec)
-        print(f"Validation PASSED for {wrong_sr_wav_path} (UNEXPECTED)")
-    except ValidationFailedError as e:
-        print(f"Validation FAILED for {wrong_sr_wav_path} (expected): {e}")
-
-    # Test case 3: WAV with wrong duration (too short)
-    short_duration_wav_path = temp_dir / "short_duration.wav"
-    audio_short = audio_valid[: len(audio_valid) // 2]  # Half duration
-    sf.write(short_duration_wav_path, audio_short, sr, subtype="FLOAT")
-    # Update spec for this test if duration is part of spec, or adjust tolerance
-    # dummy_spec_short = dummy_spec.copy(update={"duration": duration / 2}) # if spec changes
-    try:
-        print(
-            f"\n--- Validating {short_duration_wav_path} (should fail: too short) ---"
-        )
-        # Using original dummy_spec, so duration should be 1.0s, this is 0.5s
-        validate_wav(short_duration_wav_path, dummy_spec)
-        print(f"Validation PASSED for {short_duration_wav_path} (UNEXPECTED)")
-    except ValidationFailedError as e:
-        print(f"Validation FAILED for {short_duration_wav_path} (expected): {e}")
-
-    # Test case 4: WAV with peak too high
-    high_peak_wav_path = temp_dir / "high_peak.wav"
-    amplitude_invalid = 10 ** (
-        (settings.TARGET_PEAK_DBFS + 0.1) / 20
-    )  # 0.1 dB too loud
-    audio_high_peak = amplitude_invalid * np.sin(2 * np.pi * 440 * t).astype(np.float32)
-    sf.write(high_peak_wav_path, audio_high_peak, sr, subtype="FLOAT")
-    try:
-        print(f"\n--- Validating {high_peak_wav_path} (should fail: peak too high) ---")
-        validate_wav(high_peak_wav_path, dummy_spec)
-        print(f"Validation PASSED for {high_peak_wav_path} (UNEXPECTED)")
-    except ValidationFailedError as e:
-        print(f"Validation FAILED for {high_peak_wav_path} (expected): {e}")
-
-    # Test case 5: Stereo WAV
-    stereo_wav_path = temp_dir / "stereo.wav"
-    audio_stereo = np.vstack([audio_valid, audio_valid]).T  # Make it stereo
-    sf.write(stereo_wav_path, audio_stereo, sr, subtype="FLOAT")
-    try:
-        print(f"\n--- Validating {stereo_wav_path} (should fail: stereo) ---")
-        validate_wav(stereo_wav_path, dummy_spec)
-        print(f"Validation PASSED for {stereo_wav_path} (UNEXPECTED)")
-    except ValidationFailedError as e:
-        print(f"Validation FAILED for {stereo_wav_path} (expected): {e}")
-
-    # Test case 6: Silent WAV
-    silent_wav_path = temp_dir / "silent.wav"
-    audio_silent = np.zeros(int(sr * duration), dtype=np.float32)
-    sf.write(silent_wav_path, audio_silent, sr, subtype="FLOAT")
-    try:
-        print(f"\\n--- Validating {silent_wav_path} (should fail: silent audio) ---")
-        validate_wav(silent_wav_path, dummy_spec)
-        print(f"Validation PASSED for {silent_wav_path} (UNEXPECTED)")
-    except ValidationFailedError as e:
-        print(f"Validation FAILED for {silent_wav_path} (expected): {e}")
-
-    # Clean up temporary directory
-    try:
-        # shutil was imported at the top of if __name__ == "__main__":
-        shutil.rmtree(temp_dir)
-        print(f"\\nCleaned up temporary directory: {temp_dir}")
-    except Exception as e:
-        print(f"Error cleaning up temp dir {temp_dir}: {e}")
-
-    print("\\nValidator testing complete.")
