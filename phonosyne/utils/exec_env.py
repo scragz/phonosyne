@@ -125,7 +125,7 @@ def run_supercollider_code(
             f"Could not create parent directory {actual_wav_path.parent}: {e}"
         ) from e
 
-    sclang_proc = None  # scsynth_proc is removed as scsynth is now externally managed
+    sclang_proc = None
 
     safe_duration = duration if duration > 0 else 15.0
     operation_buffer_seconds = getattr(settings, "SCLANG_TIMEOUT_BUFFER_SECONDS", 30.0)
@@ -637,14 +637,6 @@ def run_supercollider_code(
             except subprocess.TimeoutExpired:
                 logger.warning("sclang did not terminate gracefully, killing.")
                 sclang_proc.kill()
-        if scsynth_proc and scsynth_proc.poll() is None:
-            logger.warning(f"Terminating scsynth due to exception: {e_general}")
-            scsynth_proc.terminate()
-            try:
-                scsynth_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                logger.warning("scsynth did not terminate gracefully, killing.")
-                scsynth_proc.kill()
         raise CodeExecutionError(
             f"An unexpected error occurred: {e_general}"
         ) from e_general

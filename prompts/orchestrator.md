@@ -61,8 +61,8 @@ sample_schema = {
 ### Workflow (state graph)
 
 ```
-INIT → DESIGN → GENERATE_SAMPLES (parallel) → FINALIZE → REPORT
- \___________ any unrecoverable error ___________/
+INIT → DESIGN → GENERATE_SAMPLES → FINALIZE → REPORT
+ \______ any unrecoverable error _____/
 ```
 
 _`REPORT` is reached only from `FINALIZE`. Early termination routes to `ERROR` and then immediately to `REPORT` with `run.completed = false`._
