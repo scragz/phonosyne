@@ -202,6 +202,20 @@ async def run_prompt(
         logger.error(
             f"Unexpected error in Phonosyne pipeline: {type(e).__name__} - {str(e)}",
             exc_info=True,
-        )  # Enhanced logging
-        # Consider if any other specific custom exceptions should be raised here
-        raise  # Re-raise the original exception or a wrapped PhonosyneError
+        )
+        if isinstance(e, TypeError) and "'NoneType' object is not subscriptable" in str(
+            e
+        ):
+            # This specific TypeError often indicates an issue with the LLM response
+            # (e.g., API error, rate limit, content filter) not handled by the SDK before access.
+            raise PhonosyneError(
+                "The LLM provider returned an invalid or empty response, leading to a TypeError "
+                "in the agents SDK (likely response.choices was None). This could be due to "
+                "API issues, rate limits, content filtering by the provider, or an internal error "
+                "at the LLM provider. Please check the detailed logs and consider API status."
+            ) from e
+        # For other unexpected errors, re-raise them or wrap them if a more specific
+        # PhonosyneError is appropriate for certain types.
+        raise PhonosyneError(
+            f"An unexpected error occurred in the Phonosyne pipeline: {type(e).__name__} - {str(e)}"
+        ) from e

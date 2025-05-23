@@ -52,9 +52,6 @@ PROMPTS_DIR: Path = Path("./prompts")
 
 # Agent & Compiler Settings
 MAX_TURNS: int = 100
-MAX_COMPILER_ITERATIONS: int = (
-    10  # Maximum attempts for the CompilerAgent to generate valid code
-)
 
 # API Keys - typically loaded from .env
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")

@@ -19,7 +19,7 @@ Key features:
 @dependencies
 - `agents.Agent` (from the new SDK)
 - `phonosyne.agents.schemas.AnalyzerOutput` (as conceptual input)
-- `phonosyne.settings` (for `MODEL_COMPILER`, `MAX_COMPILER_ITERATIONS`)
+- `phonosyne.settings` (for `MODEL_COMPILER`)
 - `phonosyne.tools.execute_python_dsp_code` (as PythonCodeExecutionTool)
 - `phonosyne.tools.validate_audio_file` (as AudioValidationTool)
 - `logging`

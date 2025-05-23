@@ -79,7 +79,7 @@ The `OrchestratorAgent`'s LLM iterates through each sound stub derived from the 
   3. **Validation (via `phonosyne.dsp.validators.validate_wav`)**:
      - `CompilerAgent` calls `validate_wav` with the temporary WAV path and `AnalyzerOutput` specs.
   4. **Repair (If Execution or Validation Fails)**:
-     - Errors are fed back to the `CompilerAgent`'s LLM for code correction, iterating up to `settings.MAX_COMPILER_ITERATIONS`.
+     - Errors are fed back to the `CompilerAgent`'s LLM for code correction.
 - **Output from `CompilerAgentTool`**: A string representing the path to the validated temporary `.wav` file.
 - **Data Flow**: `str (AnalyzerOutput JSON) -> OrchestratorAgent (uses CompilerAgentTool) -> CompilerAgent -> (LLM for code) -> str (Python code) -> exec_env.run_code -> Path (temp WAV) -> validate_wav -> str (final temp validated WAV path)`
 
@@ -114,8 +114,5 @@ The `OrchestratorAgent`'s LLM iterates through each sound stub derived from the 
 - `DEFAULT_SR`, `TARGET_PEAK_DBFS`, `DURATION_TOLERANCE_S`, `BIT_DEPTH`: Audio technical specifications.
 - `DEFAULT_OUT_DIR`: Base directory for outputs.
 - `PROMPTS_DIR`: Location of agent system prompt files.
-- `MAX_COMPILER_ITERATIONS`: Controls `CompilerAgent`'s internal refinement loop.
-- `EXECUTION_MODE`: For `phonosyne.utils.exec_env.run_code`.
-- `AUTHORIZED_IMPORTS_FOR_DSP` (in `exec_env.py`): For `LocalPythonExecutor`.
 
 This overview reflects the Phonosyne system's architecture using the `openai-agents` SDK.
