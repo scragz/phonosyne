@@ -171,6 +171,10 @@ def apply_mastering(file_path, output_path):
     y, sr = librosa.load(file_path, sr=None, mono=True)
     print(f"Loaded '{file_path}' (Length: {len(y)/sr:.2f}s, Sample rate: {sr} Hz)")
 
+    # Step 0: Normalize
+    print("Normalizing audio...")
+    y = normalize(y)
+
     # Step 1: Saturation
     print("Applying saturation...")
     drive_db = 6.0
