@@ -129,7 +129,9 @@ Let `base_temp_output_dir = "/Users/scragz/Projects/phonosyne/output/exec_env_ou
 
 5. **FAILURE** (after 10 attempts or unrecoverable/immediate error)
 
-   - Return **one** concise error string summarizing the last problem encountered (i.e., the final content of `last_error_context` or the specific immediate error from step 1).
+   - You **MUST** return a non-empty error string. This string should, at a minimum, contain the full `last_error_context` (which includes the error message from the last failed tool call and the SuperCollider code that caused it). You can prepend a brief summary if you wish, but the full `last_error_context` is critical.
+   - **DO NOT RETURN AN EMPTY STRING OR A GENERIC MESSAGE LIKE "Error".** The calling system relies on receiving the detailed error context for logging and debugging.
+   - Example of a good failure return: "FAILURE after 10 attempts. Last error: [contents of last_error_context]"
 
 ---
 
@@ -269,7 +271,6 @@ SynthDef(gEffectName ++ "_SynthDef", { |outBus = 0, gate = 1, masterAmp = 0.1, f
 Routine {
     var targetSampleRate = 48000;
 
-    server.options.sampleRate = targetSampleRate;
     server.recChannels = 1;
     server.recHeaderFormat = "WAV";
     server.recSampleFormat = "float";
@@ -321,7 +322,9 @@ IT IS CRITICAL TO FOLLOW THESE RULES. Failure to follow these rules will lead to
 
 - **Declare ALL function variables**: At the start of your script (inside the `{ ... }` block) and at the beginning of each block, declare ALL `var`s BEFORE any other operations or it WILL THROW AN ERROR.
 - **Multiple by -1 for negative variables**: If you need to invert a variable (e.g., for phase), use `-1 * variableName` instead of `-variableName`. `-variableName` WILL THROW AN ERROR.
-- **Boot the server**: Always check if the server is running and boot it if not. Use `server.bootSync` to ensure it is ready before proceeding.
+- **Boot the server**: Always check if the server is running and use `server.bootSync` to ensure it is ready before proceeding.
+- **Sum to mono**: If your signal is stereo, ensure you sum it to mono before outputting.
+- **Normalize to -1dbFS**: Before final output, normalize your signal to -1 dBFS to prevent clipping.
 
 ---
 
@@ -368,11 +371,10 @@ var gEffectName = "MySound";
             // Signal Python that sclang is ready for OSC commands (or further script execution)
             "Phonosyne SuperCollider script ready".postln;
 
-            // Inner Routine for recording, now inside waitForBoot
+            // Inner Routine for recording, inside waitForBoot
             Routine {
                 var targetSampleRate = 48000;
 
-                server.options.sampleRate = targetSampleRate;
                 server.recChannels = 1;
                 server.recHeaderFormat = "WAV";
                 server.recSampleFormat = "float";

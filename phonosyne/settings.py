@@ -55,22 +55,6 @@ MAX_TURNS: int = 100
 MAX_COMPILER_ITERATIONS: int = (
     10  # Maximum attempts for the CompilerAgent to generate valid code
 )
-COMPILER_TIMEOUT_S: int = 300  # Timeout in seconds for a single compiler execution run
-AGENT_MAX_RETRIES: int = 3  # Maximum retries for an agent call if it fails
-
-# Execution Environment
-# Supported modes: "subprocess", "inline"
-# "subprocess": Executes generated code in a sandboxed Python subprocess. Safer.
-# "inline": Executes generated code using exec() in the current process. Faster, for testing.
-EXECUTION_MODE: str = os.getenv("PHONOSYNE_EXECUTION_MODE", "subprocess")
-MAX_ORCHESTRATOR_SAMPLE_RETRIES: int = int(
-    os.getenv("MAX_ORCHESTRATOR_SAMPLE_RETRIES", 2)
-)  # Max retries for a single sample if compilation fails
-
-# Concurrency
-# Default number of worker processes for parallel tasks.
-# Can be overridden by --workers CLI flag or PHONOSYNE_WORKERS env var.
-DEFAULT_WORKERS: int = min(os.cpu_count() or 1, 8)
 
 # API Keys - typically loaded from .env
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")

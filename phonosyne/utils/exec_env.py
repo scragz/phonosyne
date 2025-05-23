@@ -224,54 +224,6 @@ def run_supercollider_code(
                 # LLM-generated code should ideally embed these values directly.
                 code_to_process = code
 
-                # More verbose logging for debugging placeholder replacement
-                path_placeholder = "PYTHON_OUTPUT_PATH_PLACEHOLDER"
-                duration_placeholder = "PYTHON_RECIPE_DURATION_PLACEHOLDER"
-                effect_name_placeholder = "PYTHON_EFFECT_NAME_PLACEHOLDER"
-
-                logger.debug(
-                    f"Checking for placeholders in code_to_process (first 500 chars): {code_to_process[:500]}"
-                )
-
-                path_found = path_placeholder in code_to_process
-                duration_found = duration_placeholder in code_to_process
-                effect_name_found = effect_name_placeholder in code_to_process
-                logger.debug(f"Placeholder '{path_placeholder}' found: {path_found}")
-                logger.debug(
-                    f"Placeholder '{duration_placeholder}' found: {duration_found}"
-                )
-                logger.debug(
-                    f"Placeholder '{effect_name_placeholder}' found: {effect_name_found}"
-                )
-
-                if path_found:
-                    sc_compatible_path = (
-                        actual_wav_path.as_posix()
-                    )  # SC uses forward slashes
-                    code_to_process = code_to_process.replace(
-                        path_placeholder, sc_compatible_path
-                    )
-                    logger.info(  # Changed to INFO for better visibility during testing
-                        f"Replaced '{path_placeholder}' with: {sc_compatible_path}"
-                    )
-
-                if duration_found:
-                    code_to_process = code_to_process.replace(
-                        duration_placeholder, str(safe_duration)
-                    )
-                    logger.info(  # Changed to INFO
-                        f"Replaced '{duration_placeholder}' with: {safe_duration}"
-                    )
-
-                if effect_name_found:
-                    actual_effect_name = effect_name if effect_name else "UnnamedEffect"
-                    code_to_process = code_to_process.replace(
-                        effect_name_placeholder, actual_effect_name
-                    )
-                    logger.info(  # Changed to INFO
-                        f"Replaced '{effect_name_placeholder}' with: {actual_effect_name}"
-                    )
-
                 # Log a preview of the script that will be escaped and interpreted
                 processed_script_preview_lines = code_to_process.splitlines()[
                     :5
@@ -496,9 +448,6 @@ def run_supercollider_code(
         )
         render_msg_builder.add_arg(str(actual_wav_path))
         render_msg_builder.add_arg(safe_duration)
-        # The SC script OSCdef for /phonosyne/render expects: path (string), duration (float)
-        # The effect_name was removed from the SC script's OSCdef for /phonosyne/render
-        # render_msg_builder.add_string(effect_name if effect_name else "unknown_effect")
         osc_client.send(render_msg_builder.build())
 
         logger.info(
@@ -730,11 +679,3 @@ def run_supercollider_code(
         f"Successfully produced WAV file via OSC-controlled SuperCollider: {actual_wav_path}"
     )
     return actual_wav_path
-
-
-# If you have a run_python_code function, it would go here.
-# For example:
-# def run_python_code(code: str, output_filename: str, duration: float, effect_name: str | None = None) -> Path:
-#     logger.warning("run_python_code is not fully implemented in this refactoring pass.")
-#     # ... (original run_python_code logic if it exists and is separate) ...
-#     raise NotImplementedError("run_python_code needs to be reviewed/reinstated if used.")

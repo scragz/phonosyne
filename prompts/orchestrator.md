@@ -82,7 +82,7 @@ _`REPORT` is reached only from `FINALIZE`. Early termination routes to `ERROR` a
 
 #### Step 3 – GENERATE_SAMPLES (parallel)
 
-- Launch up to **`MAX_PARALLEL_JOBS` = 4** concurrent workers, each processing one `SampleStub`.
+- Launch up to **`MAX_PARALLEL_JOBS` = 6** concurrent workers, each processing one `SampleStub`.
 - For each `sample` from `run.plan.samples`:
 
   - Initialize a `sample_schema` object for the current sample, including its `index` and `stub`. Append it to `run.samples`.
