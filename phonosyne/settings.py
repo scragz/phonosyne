@@ -51,7 +51,7 @@ DEFAULT_OUT_DIR: Path = Path("./output").absolute()
 PROMPTS_DIR: Path = Path("./prompts")
 
 # Agent & Compiler Settings
-MAX_TURNS: int = 100
+MAX_TURNS: int = 200
 
 # API Keys - typically loaded from .env
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
