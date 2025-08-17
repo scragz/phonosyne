@@ -12,7 +12,7 @@ Key features:
 - Instructions are loaded from `prompts/compiler.md`.
 - Input: `AnalyzerOutput` schema (as a JSON string).
 - Output: Path to a validated temporary .wav file (as a string).
-- Uses `PythonCodeExecutionTool` and `AudioValidationTool`.
+- Uses `SaveTextFileTool`.
 - The iterative loop for code generation, execution, validation, and repair
   is guided by its instructions and managed by the `agents` SDK.
 
@@ -20,8 +20,7 @@ Key features:
 - `agents.Agent` (from the new SDK)
 - `phonosyne.agents.schemas.AnalyzerOutput` (as conceptual input)
 - `phonosyne.settings` (for `MODEL_COMPILER`)
-- `phonosyne.tools.execute_python_dsp_code` (as PythonCodeExecutionTool)
-- `phonosyne.tools.validate_audio_file` (as AudioValidationTool)
+- `phonosyne.tools.save_text_file` (as SaveTextFileTool)
 - `logging`
 - `pathlib`
 
@@ -43,7 +42,7 @@ from agents import (
 
 from phonosyne import settings
 from phonosyne.agents.schemas import AnalyzerOutput  # Conceptual input schema
-from phonosyne.tools import run_supercollider_code, validate_audio_file
+from phonosyne.tools import save_text_file
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +85,7 @@ class CompilerAgent(Agent):
 
         # The tools available to this agent
         agent_tools = [
-            run_supercollider_code,
-            validate_audio_file,
+            save_text_file,
         ]
 
         logger.info("Output directory for CompilerAgent: %s", settings.DEFAULT_OUT_DIR)
