@@ -38,6 +38,7 @@ from phonosyne import __version__
 from phonosyne import run_prompt as sdk_run_prompt
 from phonosyne import settings
 from phonosyne.dsp.master import apply_mastering
+from phonosyne.dsp.trim import trim_silence
 from phonosyne.sdk import OpenRouterCreditsError, PhonosyneError
 
 # Initialize Typer app
@@ -199,6 +200,27 @@ def master(
     Run the mastering effect on an audio file.
     """
     apply_mastering(input_file, output_file)
+
+
+@app.command(help="Trim silence from the beginning and end of an audio file.")
+def trim(
+    input_file: Path = typer.Argument(
+        ..., help="Path to the input audio file to be trimmed."
+    ),
+    output_file: Path = typer.Argument(
+        ..., help="Path to save the trimmed audio file."
+    ),
+    top_db: int = typer.Option(
+        40, "--top-db", "-t", help="The threshold (in decibels) below reference to consider as silence."
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose logging output.", is_flag=True
+    ),
+):
+    """
+    Trim silence from the beginning and end of an audio file.
+    """
+    trim_silence(input_file, output_file, top_db=top_db)
 
 
 @app.callback()

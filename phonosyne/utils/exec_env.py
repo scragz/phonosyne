@@ -335,12 +335,22 @@ def run_supercollider_code(
                             f"sclang {'STDOUT' if is_stdout else 'STDERR'} (setup): {line_str}",
                         )
 
-                        if is_stdout and SCLANG_READY_SIGNAL in line_str:
-                            logger.info(
-                                f"Detected sclang ready signal: '{SCLANG_READY_SIGNAL}'"
-                            )
-                            initial_setup_phase_done = True
-                            # No need to break inner loop, consume all current output
+                        if is_stdout:
+                            if SCLANG_READY_SIGNAL in line_str:
+                                logger.info(
+                                    f"Detected sclang ready signal: '{SCLANG_READY_SIGNAL}'"
+                                )
+                                initial_setup_phase_done = True
+                            elif "SC_LOG: Preparing for record" in line_str:
+                                logger.info(
+                                    f"Detected implicit ready signal (script running): '{line_str}'"
+                                )
+                                initial_setup_phase_done = True
+                            elif "Preparing recording on" in line_str:
+                                logger.info(
+                                    f"Detected implicit ready signal (standard SC output): '{line_str}'"
+                                )
+                                initial_setup_phase_done = True
 
                         for keyword in error_keywords_lower:
                             if keyword in line_str.lower():
