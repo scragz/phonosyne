@@ -31,8 +31,7 @@ def trim_silence(input_path, output_path, top_db=40):
 
         # Save output
         sf.write(output_path, y_trimmed, sr)
-        return True
+        return duration_before, duration_after
     except Exception as e:
         logger.error(f"Error trimming {input_path}: {e}")
-        return False
-        return False
+        return None

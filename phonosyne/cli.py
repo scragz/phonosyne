@@ -36,7 +36,6 @@ from rich.text import Text
 
 from phonosyne import __version__
 from phonosyne import run_prompt as sdk_run_prompt
-from phonosyne import settings
 from phonosyne.dsp.master import apply_mastering
 from phonosyne.dsp.trim import trim_silence
 from phonosyne.sdk import OpenRouterCreditsError, PhonosyneError
@@ -113,7 +112,7 @@ def run(  # Changed to synchronous def
     logging.getLogger("openai._base_client").setLevel(logging.INFO)
 
     if verbose:
-        console.print(f"Verbose mode enabled. Log level set to DEBUG.", style="dim")
+        console.print("Verbose mode enabled. Log level set to DEBUG.", style="dim")
         root_logger.debug("Root logger reconfigured for DEBUG level by CLI.")
         phonosyne_logger.debug(
             "Phonosyne specific loggers also reconfigured for DEBUG level by CLI."
@@ -155,24 +154,24 @@ def run(  # Changed to synchronous def
         # This is a basic way to indicate issues until a more structured result is implemented.
         if "error" in str(result).lower() or "fail" in str(result).lower():
             error_console.print(
-                f"The generation process reported issues. Please check the output message and logs for details."
+                "The generation process reported issues. Please check the output message and logs for details."
             )
             raise typer.Exit(code=1)
 
     except OpenRouterCreditsError as e:
-        error_console.print(f"\n💥 OpenRouter Credits Exhausted:", style="bold red")
+        error_console.print("\n💥 OpenRouter Credits Exhausted:", style="bold red")
         error_console.print(str(e))
         error_console.print(
             "Please add more credits to your OpenRouter account and try again."
         )
         raise typer.Exit(code=1)
     except PhonosyneError as e:
-        error_console.print(f"\n💥 Phonosyne Error:", style="bold red")
+        error_console.print("\n💥 Phonosyne Error:", style="bold red")
         error_console.print(str(e))
         raise typer.Exit(code=1)
     except Exception as e:
         error_console.print(
-            f"\n💥 An critical error occurred in the CLI or Phonosyne pipeline:"
+            "\n💥 An critical error occurred in the CLI or Phonosyne pipeline:"
         )
         error_console.print(str(e))  # Ensure e is converted to string
         if verbose:
@@ -199,7 +198,9 @@ def master(
     """
     Run the mastering effect on an audio file.
     """
+    console.print(f"🎚️ Mastering [cyan]{input_file}[/cyan]...")
     apply_mastering(input_file, output_file)
+    console.print(f"✅ Mastered [green]{output_file}[/green]")
 
 
 @app.command(help="Trim silence from the beginning and end of an audio file.")
@@ -211,7 +212,10 @@ def trim(
         ..., help="Path to save the trimmed audio file."
     ),
     top_db: int = typer.Option(
-        40, "--top-db", "-t", help="The threshold (in decibels) below reference to consider as silence."
+        40,
+        "--top-db",
+        "-t",
+        help="The threshold (in decibels) below reference to consider as silence.",
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose logging output.", is_flag=True
@@ -220,7 +224,99 @@ def trim(
     """
     Trim silence from the beginning and end of an audio file.
     """
-    trim_silence(input_file, output_file, top_db=top_db)
+    console.print(f"✂️ Trimming [cyan]{input_file}[/cyan] (top_db={top_db})...")
+    stats = trim_silence(input_file, output_file, top_db=top_db)
+    if stats:
+        before, after = stats
+        console.print(
+            f"✅ Trimmed [cyan]{input_file.name}[/cyan]: {before:.2f}s -> {after:.2f}s",
+            style="green",
+        )
+    else:
+        error_console.print(f"❌ Failed to trim {input_file}")
+
+
+@app.command(help="Trim silence from all .wav files in a directory.")
+def trim_all(
+    directory: Path = typer.Argument(
+        ..., help="The directory containing .wav files to trim."
+    ),
+    top_db: int = typer.Option(
+        40,
+        "--top-db",
+        "-t",
+        help="The threshold (in decibels) below reference to consider as silence.",
+    ),
+):
+    """
+    Trims silence from all .wav files in a directory.
+    """
+    if not directory.is_dir():
+        error_console.print(f"Error: {directory} is not a directory.")
+        raise typer.Exit(code=1)
+
+    wav_files = list(directory.rglob("*.wav"))
+    if not wav_files:
+        console.print(f"No .wav files found in {directory}", style="yellow")
+        return
+
+    console.print(
+        f"🔍 Found [bold]{len(wav_files)}[/bold] .wav files in [cyan]{directory}[/cyan]",
+        style="cyan",
+    )
+
+    processed_count = 0
+    with console.status("[bold green]Trimming silence...") as status:
+        for wav_file in wav_files:
+            status.update(f"[bold green]Trimming {wav_file.name}...")
+            stats = trim_silence(wav_file, wav_file, top_db=top_db)
+            if stats:
+                processed_count += 1
+
+    console.print(
+        f"✅ Finished! Trimmed [bold]{processed_count}/{len(wav_files)}[/bold] files.",
+        style="bold green",
+    )
+
+
+@app.command(help="Apply mastering to all .wav files in a directory.")
+def master_all(
+    directory: Path = typer.Argument(
+        ..., help="The directory containing .wav files to master."
+    ),
+):
+    """
+    Applies mastering to all .wav files in a directory.
+    """
+    if not directory.is_dir():
+        error_console.print(f"Error: {directory} is not a directory.")
+        raise typer.Exit(code=1)
+
+    wav_files = list(directory.rglob("*.wav"))
+    if not wav_files:
+        console.print(f"No .wav files found in {directory}", style="yellow")
+        return
+
+    console.print(
+        f"🔍 Found [bold]{len(wav_files)}[/bold] .wav files in [cyan]{directory}[/cyan]",
+        style="cyan",
+    )
+
+    processed_count = 0
+    # Mastering is intensive, so we don't use console.status if it already prints a lot.
+    # However, a wrapper around the output might be nice.
+    for wav_file in wav_files:
+        console.print(f"🎚️ Mastering {wav_file.name}...")
+        try:
+            apply_mastering(wav_file, wav_file)
+            processed_count += 1
+        except Exception as e:
+            error_console.print(f"❌ Failed to master {wav_file}: {e}")
+
+    console.print(
+        f"✅ Finished! Mastered [bold]{processed_count}/{len(wav_files)}[/bold] files.",
+        style="bold green",
+    )
 
 
 @app.callback()
@@ -231,7 +327,7 @@ def main_callback(
         callback=version_callback,
         is_eager=True,
         help="Show CLI version and exit.",
-    )
+    ),
 ):
     """
     Phonosyne CLI main callback.
