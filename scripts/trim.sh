@@ -7,4 +7,4 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-find "$1" -type f -name "*.wav" -exec python ./scripts/phonosyne.py trim {} {} \;
+python ./scripts/phonosyne.py trim-all "$1"
