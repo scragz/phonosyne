@@ -29,17 +29,21 @@ Brief: “Solar winds sweeping an abandoned orbital station—shifting from sere
 | key       | type  | rule                                                         |
 | --------- | ----- | ------------------------------------------------------------ |
 | `theme`   | str   | snake_case slug distilled from the brief (≤ 6 words)         |
-| `samples` | array | **exactly 24** objects, ordered Movement 1 → 6, Sample 1 → 3 |
+| `samples` | array | **exactly 24** objects, ordered Movement 1 → 2, Sample 1 → 4 |
 
 ---
 
 ## 4 Movement & sample grid
 
 ```
-Movement 1 :  L1.1 , L1.2 , R1.1, L1.2
-Movement 2 :  L2.1 , L2.2 , R2.1, L2.2
-…
-Movement 6 :  L6.1 , L6.2 , R6.3, R6.4
+Movement 1 :  L1.1 , L1.2 , R1.1, R1.2
+              L2.1 , L2.2 , R2.1, R2.2
+              …
+              L6.1 , L6.2 , R6.1, R6.2
+Movement 2 :  L7.1 , L7.2 , R7.1, R7.2
+              L8.1 , L8.2 , R8.1, R8.2
+              …
+              L12.1, L12.2, R12.1, R12.2
 ```
 
 ---
@@ -48,9 +52,9 @@ Movement 6 :  L6.1 , L6.2 , R6.3, R6.4
 
 | key                | type  | strict rule                                |
 | ------------------ | ----- | ------------------------------------------ |
-| `id`               | str   | Pattern above (`L{n}.1`, `L{n}.2`, `R{n}`) |
-| `duration`         | float | 10.0 ≤ x ≤ 30.0   |
-| `seed_description` | str   | ≤ 60 words, vivid + technical (see §6)     |
+| `id`               | str   | Pattern above (`L{n}.1`, `L{n}.2`, `R{n}.1`, `R{n}.2`) |
+| `duration`         | float | 5.0 ≤ x ≤ 20.0   |
+| `seed_description` | str   | 60 – 80 words, vivid + technical (see §6)     |
 
 ### Example sample object (fragment)
 
@@ -63,12 +67,13 @@ Movement 6 :  L6.1 , L6.2 , R6.3, R6.4
 
 ## 6 Seed-description guidelines
 
-1. **Word count**: 40 – 60 recommended, hard max 60.
+1. **Word count**: 60 – 80 recommended, hard max 100.
 2. **Detail**: Mention waveforms, pitch regions/notes, envelopes (ADSR, exponential fades), filter types & sweeps (cutoff, Q), modulation sources (LFO rates, random), and at least one effect (use plain names: chorus, dub_echo, etc.).
 3. **Style distinctions**
 
-   - **L-samples**: made for looping and time-stretching.
-   - **R-samples**: made for melotron playback.
+   - **L-samples**: made for looping and time-stretching (melodies, evolving sounds, rhythms, stuff that will sound cool slowed down or sped up or reversed).
+   - **R{n}.1-samples**: made for sequencing (avoid melodies, favor samples that would work played from the beginning with different pitches)
+   - **R{n}.2-samples**: made for mellotron playback (textures that will be spread out, mostly avoiding too much complexity or rhtythmin samples).
 
 4. **Prohibited words**: Do **not** write “Lubadh” or “Phonosyne”.
 5. **No JSON / code fragments** inside the description.
@@ -77,7 +82,7 @@ Movement 6 :  L6.1 , L6.2 , R6.3, R6.4
 
 ## 7 Thematic arc
 
-- Craft six movements that **progress or contrast**—e.g., tension → climax → resolution, or dark → bright.
+- Craft X movements that **progress or contrast**—e.g., tension → climax → resolution, or dark → bright.
 - Let ids and durations reinforce that arc (longer, denser textures may appear mid-set, lighter ones at the end).
 
 ---
@@ -100,3 +105,5 @@ Always honour structural constraints (IDs, counts, durations).
 ### Final reminder
 
 Respond with **only** the one-line JSON plan. Any deviation will break the pipeline.
+
+---

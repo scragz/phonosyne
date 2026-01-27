@@ -27,6 +27,9 @@ Any other exit path is a failure. Never announce success, return “OK,” or yi
 > **Output directory rule**
 > The `run.output_dir` is created as `./output/<slugified brief[:50 first 50 characters]>/` to ensure uniqueness and avoid collisions without hitting the filesystem limits.
 
+> **Manifest rule**
+> The manifest should include the original brief, the full design plan, and for each sample the seed_description and recipe used, duration, and file name.
+
 ---
 
 ### Global state object
