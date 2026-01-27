@@ -5,10 +5,8 @@ This module contains the core SDK logic for Phonosyne, including the
 `run_prompt` function and the configuration for using OpenRouter.
 """
 
-import asyncio
 import logging
-import os
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from agents import (
     Agent,
@@ -198,24 +196,27 @@ async def run_prompt(
             raise PhonosyneError(
                 f"OpenAI API error: {type(e).__name__} - {str(e)}"
             ) from e
+    except TypeError as e:
+        # Handle library bug where response.choices is None (e.g., API errors, rate limits)
+        if "'NoneType' object is not subscriptable" in str(e):
+            logger.error(
+                "LLM provider returned an invalid response (missing choices). "
+                "This is typically caused by API errors, rate limits, or content filtering.",
+                exc_info=True,
+            )
+            raise PhonosyneError(
+                "The LLM provider returned an invalid response. This could be due to "
+                "API errors, rate limits, content filtering, or insufficient credits. "
+                "Check your OpenRouter account and API status."
+            ) from e
+        raise PhonosyneError(
+            f"Type error in Phonosyne pipeline: {str(e)}"
+        ) from e
     except Exception as e:
         logger.error(
             f"Unexpected error in Phonosyne pipeline: {type(e).__name__} - {str(e)}",
             exc_info=True,
         )
-        if isinstance(e, TypeError) and "'NoneType' object is not subscriptable" in str(
-            e
-        ):
-            # This specific TypeError often indicates an issue with the LLM response
-            # (e.g., API error, rate limit, content filter) not handled by the SDK before access.
-            raise PhonosyneError(
-                "The LLM provider returned an invalid or empty response, leading to a TypeError "
-                "in the agents SDK (likely response.choices was None). This could be due to "
-                "API issues, rate limits, content filtering by the provider, or an internal error "
-                "at the LLM provider. Please check the detailed logs and consider API status."
-            ) from e
-        # For other unexpected errors, re-raise them or wrap them if a more specific
-        # PhonosyneError is appropriate for certain types.
         raise PhonosyneError(
             f"An unexpected error occurred in the Phonosyne pipeline: {type(e).__name__} - {str(e)}"
         ) from e
