@@ -36,7 +36,7 @@ MODEL_COMPILER: str = os.getenv("MODEL_COMPILER", MODEL_DEFAULT)
 
 # Audio Processing Settings
 DEFAULT_SR: int = 48_000  # Default sample rate in Hz
-TARGET_PEAK_DBFS: float = -0.1  # Target peak level in dBFS for normalization
+TARGET_PEAK_DBFS: float = -0.0  # Target peak level in dBFS for normalization
 DURATION_TOLERANCE_S: float = 2  # Allowed duration tolerance in seconds
 BIT_DEPTH: int = 32  # Bit depth for output WAV files (32-bit float)
 DEFAULT_AUDIO_BLOCK_SIZE: int = (
@@ -64,7 +64,8 @@ OPENROUTER_BASE_URL: str = os.getenv(
 # You can set a preferred default model via environment variable,
 # or change the fallback string literal below.
 DEFAULT_OPENROUTER_MODEL_NAME: str = os.getenv(
-    "OPENROUTER_MODEL_NAME", "mistralai/mistral-7b-instruct"  # Example fallback
+    "OPENROUTER_MODEL_NAME",
+    "mistralai/mistral-7b-instruct",  # Example fallback
 )
 
 # Logging
