@@ -209,9 +209,7 @@ async def run_prompt(
                 "API errors, rate limits, content filtering, or insufficient credits. "
                 "Check your OpenRouter account and API status."
             ) from e
-        raise PhonosyneError(
-            f"Type error in Phonosyne pipeline: {str(e)}"
-        ) from e
+        raise PhonosyneError(f"Type error in Phonosyne pipeline: {str(e)}") from e
     except Exception as e:
         logger.error(
             f"Unexpected error in Phonosyne pipeline: {type(e).__name__} - {str(e)}",
