@@ -148,6 +148,33 @@ async def validate_audio_file(file_path: str, effect_name: str, duration: float)
     except Exception as e:
         return f"Unexpected error during audio validation: {str(e)}"
 
+@function_tool
+async def save_text_file(
+    content: str, output_path: str, file_name: str
+) -> str:
+    """
+    Saves a string content to a text file at the specified path.
+
+    Args:
+        content: The string content to save.
+        output_path: The directory where the file will be saved.
+        file_name: The name of the file to create.
+
+    Returns:
+        A success message with the absolute path of the saved file,
+        or an error message string.
+    """
+    try:
+        output_dir = Path(output_path).resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        file_path = output_dir / file_name
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        return f"File saved successfully at {file_path.resolve()}"
+    except Exception as e:
+        return f"Error saving text file at {output_path}/{file_name}: {str(e)}"
 
 @function_tool
 async def move_file(source_path: str, target_path: str) -> str:
