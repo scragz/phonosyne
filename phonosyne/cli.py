@@ -150,13 +150,8 @@ def run(  # Changed to synchronous def
         # Assuming result is the final string output from OrchestratorAgent.
         console.print(Panel(Text(str(result), style="bold green"), title="Run Result"))
 
-        # A simple check: if the result string contains "error" or "fail", exit with code 1.
-        # This is a basic way to indicate issues until a more structured result is implemented.
-        if "error" in str(result).lower() or "fail" in str(result).lower():
-            error_console.print(
-                "The generation process reported issues. Please check the output message and logs for details."
-            )
-            raise typer.Exit(code=1)
+        # Success! The SDK already handles errors via exceptions (OpenRouterCreditsError, PhonosyneError)
+        # so if we reached here, the run completed successfully.
 
     except OpenRouterCreditsError as e:
         error_console.print("\n💥 OpenRouter Credits Exhausted:", style="bold red")
